@@ -2,7 +2,7 @@
 
 The Fernet key is derived from this Home Assistant install's instance id
 (``.storage/core.uuid``). A copy of the config entry alone does not reveal the
-Cursor key. A full configuration-directory backup includes the instance id, so
+API key. A full configuration-directory backup includes the instance id, so
 it can decrypt the key — the same boundary as the rest of Home Assistant.
 """
 

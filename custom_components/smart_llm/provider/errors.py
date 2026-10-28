@@ -7,7 +7,7 @@ class SmartLLMError(Exception):
     """Base class for provider failures."""
 
 
-class CursorAPIError(SmartLLMError):
+class ProviderAPIError(SmartLLMError):
     """The remote API rejected the request or could not be reached."""
 
     def __init__(self, message: str, *, status: int | None = None) -> None:
@@ -15,8 +15,16 @@ class CursorAPIError(SmartLLMError):
         self.status = status
 
 
-class CursorAuthError(CursorAPIError):
-    """The API key or login session was rejected."""
+class ProviderAuthError(ProviderAPIError):
+    """The API key was rejected."""
+
+
+class CursorAPIError(ProviderAPIError):
+    """Cursor Bridge or the Cursor login API rejected the request."""
+
+
+class CursorAuthError(ProviderAuthError, CursorAPIError):
+    """The Cursor API key or login session was rejected."""
 
 
 class CursorLoginError(SmartLLMError):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
@@ -31,21 +32,36 @@ from homeassistant.helpers.selector import (
 from .const import (
     AGENT_NAME,
     CONF_ACKNOWLEDGE_BRIDGE,
+    CONF_API_KEY,
     CONF_API_KEY_ENCRYPTED,
     CONF_API_KEY_EXPIRES_AT,
     CONF_AVAILABLE_MODELS,
+    CONF_BASE_URL,
     CONF_BRIDGE_BASE_URL,
+    CONF_CONNECTION_MODE,
     CONF_EMAIL,
     CONF_MODEL,
     CONF_PROVIDER,
+    CONNECTION_COMPATIBLE,
+    CONNECTION_OFFICIAL,
     DEFAULT_BRIDGE_BASE_URL,
     DEFAULT_MODEL,
     DOMAIN,
+    PROVIDER_ANTHROPIC,
     PROVIDER_CURSOR,
+    PROVIDER_LABELS,
+    PROVIDER_OPENAI,
 )
 from .crypto import DecryptionError, mask_secret
+from .flow_input import (
+    parse_api_key,
+    parse_connection,
+    parse_model_id,
+    suggested_model,
+)
 from .identity import (
     account_unique_id,
+    api_provider_unique_id,
     clear_account_switch,
     credential_update_block,
     display_account,
@@ -62,11 +78,22 @@ from .provider.cursor_auth import (
     create_login_handshake,
 )
 from .provider.cursor_bridge import CursorBridgeClient, normalize_bridge_base_url
-from .provider.errors import CursorAPIError, CursorAuthError, CursorLoginError
-from .provider.registry import provider_menu_options
+from .provider.errors import (
+    CursorAuthError,
+    CursorLoginError,
+    ProviderAPIError,
+    ProviderAuthError,
+)
+from .provider.registry import create_chat_provider, provider_menu_options
+from .provider.urls import resolve_base_url
 from .secrets import async_decrypt, async_encrypt
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def masked_provider_title(provider: str, api_key: str) -> str:
+    label = PROVIDER_LABELS.get(provider, provider)
+    return f"{label} ({mask_secret(api_key)})"
 
 
 def _ensure_default_model(models: list[str]) -> list[str]:
@@ -183,8 +210,388 @@ class _CursorBrowserLogin:
         raise NotImplementedError
 
 
-class SmartLLMConfigFlow(ConfigFlow, _CursorBrowserLogin, domain=DOMAIN):
-    """Walk the user through provider choice, Cursor login, and model selection."""
+class _ApiKeySetup:
+    """API-key steps for OpenAI and Anthropic, shared by both flows."""
+
+    _api_provider: str | None = None
+    _plain_api_key: str | None = None
+    _connection_mode: str | None = None
+    _resolved_base: str | None = None
+    _api_models: list[str] | None = None
+    _api_list_error: str | None = None
+    _refreshed_models: list[str] | None = None
+    _refresh_error: str | None = None
+
+    def _provider_label(self) -> str:
+        return PROVIDER_LABELS.get(self._api_provider or "", "Smart LLM")
+
+    async def async_step_openai(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Collect an OpenAI API key."""
+        self._api_provider = PROVIDER_OPENAI
+        return await self.async_step_api_key()
+
+    async def async_step_anthropic(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Collect an Anthropic API key."""
+        self._api_provider = PROVIDER_ANTHROPIC
+        return await self.async_step_api_key()
+
+    async def async_step_api_key(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose official API or a custom base URL, then check the key."""
+        if self._api_provider not in {PROVIDER_OPENAI, PROVIDER_ANTHROPIC}:
+            return self.async_abort(reason="unknown")
+        errors: dict[str, str] = {}
+        suggested: dict[str, Any] = {
+            CONF_CONNECTION_MODE: CONNECTION_OFFICIAL,
+            CONF_BASE_URL: "",
+        }
+        if user_input is not None:
+            key, key_errors = parse_api_key(user_input)
+            parsed, conn_errors = parse_connection(self._api_provider, user_input)
+            errors.update(key_errors)
+            errors.update(conn_errors)
+            suggested = {
+                CONF_CONNECTION_MODE: user_input.get(
+                    CONF_CONNECTION_MODE, CONNECTION_OFFICIAL
+                ),
+                CONF_BASE_URL: user_input.get(CONF_BASE_URL, ""),
+            }
+            if key:
+                suggested[CONF_API_KEY] = key
+            if not errors and key and parsed is not None:
+                self._plain_api_key = key
+                self._connection_mode = parsed.mode
+                self._resolved_base = parsed.base_url
+                list_error = await self._async_probe_models()
+                if list_error == "provider_auth":
+                    errors["base"] = "provider_auth"
+                    self._plain_api_key = None
+                elif list_error == "invalid_url":
+                    errors[CONF_BASE_URL] = "invalid_url"
+                    self._plain_api_key = None
+                else:
+                    self._api_list_error = list_error
+                    return await self.async_step_provider_model()
+        return self.async_show_form(
+            step_id="api_key",
+            data_schema=self.add_suggested_values_to_schema(
+                _api_key_schema(), suggested
+            ),
+            errors=errors,
+            description_placeholders={"provider": self._provider_label()},
+        )
+
+    async def async_step_provider_model(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Pick the model used by Assist. The key is already in memory."""
+        if not self._plain_api_key or self._api_provider is None:
+            return await self.async_step_api_key()
+        errors: dict[str, str] = {}
+        models = list(self._api_models or [])
+        if user_input is not None:
+            parsed, conn_errors = parse_connection(self._api_provider, user_input)
+            errors.update(conn_errors)
+            model = parse_model_id(user_input.get(CONF_MODEL))
+            if model is None:
+                errors[CONF_MODEL] = "invalid_model"
+            prompt = str(user_input.get(CONF_PROMPT) or "").strip()
+            llm_api = _clean_llm_api(user_input.get(CONF_LLM_HASS_API))
+            if (
+                not conn_errors
+                and parsed is not None
+                and (
+                    parsed.mode != self._connection_mode
+                    or parsed.base_url != self._resolved_base
+                )
+            ):
+                self._connection_mode = parsed.mode
+                self._resolved_base = parsed.base_url
+                list_error = await self._async_probe_models()
+                self._api_list_error = list_error
+                models = list(self._api_models or [])
+                if list_error == "invalid_url":
+                    errors[CONF_BASE_URL] = "invalid_url"
+                elif list_error == "provider_auth":
+                    errors["base"] = "provider_auth"
+                elif list_error == "provider_connect":
+                    errors["base"] = "provider_connect"
+                elif list_error == "provider_no_models":
+                    errors["base"] = "provider_no_models"
+                elif list_error:
+                    errors["base"] = "unknown"
+            elif self._api_list_error == "provider_auth":
+                errors["base"] = "provider_auth"
+            if (
+                not errors
+                and parsed is not None
+                and model is not None
+            ):
+                return await self._async_create_api_entry(
+                    parsed, model, prompt, llm_api
+                )
+            suggested = {
+                key: value
+                for key, value in user_input.items()
+                if key != CONF_API_KEY and value is not None
+            }
+        else:
+            mode = self._connection_mode or CONNECTION_OFFICIAL
+            suggested = {
+                CONF_CONNECTION_MODE: mode,
+                CONF_BASE_URL: ""
+                if mode == CONNECTION_OFFICIAL
+                else (self._resolved_base or ""),
+                CONF_MODEL: suggested_model(self._api_provider, models),
+            }
+            if self._api_list_error == "provider_connect":
+                errors["base"] = "provider_connect"
+            elif self._api_list_error == "provider_no_models":
+                errors["base"] = "provider_no_models"
+            elif self._api_list_error:
+                errors["base"] = "unknown"
+        return self.async_show_form(
+            step_id="provider_model",
+            data_schema=self.add_suggested_values_to_schema(
+                _provider_model_schema(self.hass, models),
+                suggested,
+            ),
+            errors=errors,
+            description_placeholders={
+                "provider": self._provider_label(),
+                "masked_key": mask_secret(self._plain_api_key),
+                "base_url": self._resolved_base or "",
+            },
+        )
+
+    async def async_step_api_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Update request style, base URL, model, prompt, and Assist tools."""
+        entry = self.config_entry
+        provider = entry.data.get(CONF_PROVIDER, PROVIDER_OPENAI)
+        self._api_provider = provider
+        errors: dict[str, str] = {}
+        current = dict(entry.options)
+        if self._refreshed_models is not None:
+            models = list(self._refreshed_models)
+        else:
+            models = list(current.get(CONF_AVAILABLE_MODELS) or [])
+        current_model = current.get(CONF_MODEL)
+        if (
+            isinstance(current_model, str)
+            and current_model
+            and current_model not in models
+        ):
+            models = [current_model, *models]
+        if user_input is not None:
+            parsed, conn_errors = parse_connection(provider, user_input)
+            errors.update(conn_errors)
+            model = parse_model_id(user_input.get(CONF_MODEL))
+            if model is None:
+                errors[CONF_MODEL] = "invalid_model"
+            prompt = str(user_input.get(CONF_PROMPT) or "").strip()
+            llm_api = _clean_llm_api(user_input.get(CONF_LLM_HASS_API))
+            if not errors and parsed is not None and model is not None:
+                updated = dict(current)
+                updated[CONF_CONNECTION_MODE] = parsed.mode
+                if parsed.mode == CONNECTION_COMPATIBLE:
+                    updated[CONF_BASE_URL] = parsed.base_url
+                else:
+                    updated.pop(CONF_BASE_URL, None)
+                updated[CONF_MODEL] = model
+                stored_models = list(models)
+                if model not in stored_models:
+                    stored_models.append(model)
+                updated[CONF_AVAILABLE_MODELS] = stored_models
+                if prompt:
+                    updated[CONF_PROMPT] = prompt
+                else:
+                    updated.pop(CONF_PROMPT, None)
+                if llm_api:
+                    updated[CONF_LLM_HASS_API] = llm_api
+                else:
+                    updated.pop(CONF_LLM_HASS_API, None)
+                return self.async_create_entry(title="", data=updated)
+            suggested = {
+                key: value
+                for key, value in user_input.items()
+                if value is not None
+            }
+        else:
+            mode = current.get(CONF_CONNECTION_MODE, CONNECTION_OFFICIAL)
+            suggested = {
+                CONF_CONNECTION_MODE: mode,
+                CONF_BASE_URL: current.get(CONF_BASE_URL, "")
+                if mode == CONNECTION_COMPATIBLE
+                else "",
+                CONF_MODEL: current.get(CONF_MODEL, suggested_model(provider, models)),
+                CONF_PROMPT: current.get(CONF_PROMPT, ""),
+            }
+            if current.get(CONF_LLM_HASS_API):
+                suggested[CONF_LLM_HASS_API] = current[CONF_LLM_HASS_API]
+            if self._refresh_error:
+                errors["base"] = self._refresh_error
+        masked, account = await _identity(self.hass, entry)
+        return self.async_show_form(
+            step_id="api_settings",
+            data_schema=self.add_suggested_values_to_schema(
+                _provider_model_schema(self.hass, models),
+                suggested,
+            ),
+            errors=errors,
+            description_placeholders={
+                "provider": PROVIDER_LABELS.get(provider, provider),
+                "masked_key": masked,
+                "base_url": _display_base_url(provider, current),
+                "account": account,
+            },
+        )
+
+    async def async_step_update_key(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Replace the stored API key after a model-list check."""
+        entry = _flow_entry(self)
+        provider = entry.data.get(CONF_PROVIDER, PROVIDER_OPENAI)
+        self._api_provider = provider
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            key, key_errors = parse_api_key(user_input)
+            errors.update(key_errors)
+            if not errors and key:
+                self._plain_api_key = key
+                try:
+                    self._resolved_base = resolve_base_url(provider, entry.options)
+                    self._connection_mode = entry.options.get(
+                        CONF_CONNECTION_MODE, CONNECTION_OFFICIAL
+                    )
+                except ValueError:
+                    errors["base"] = "invalid_url"
+                else:
+                    list_error = await self._async_probe_models()
+                    if list_error == "provider_auth":
+                        errors["base"] = "provider_auth"
+                    elif list_error in {"provider_connect", "unknown", "invalid_url"}:
+                        errors["base"] = (
+                            "invalid_url" if list_error == "invalid_url" else "provider_connect"
+                        )
+                    else:
+                        self._plain_api_key = None
+                        return await _async_replace_api_key(self, entry, key)
+                self._plain_api_key = None
+        masked, account = await _identity(self.hass, entry)
+        return self.async_show_form(
+            step_id="update_key",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_API_KEY): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                    ),
+                }
+            ),
+            errors=errors,
+            description_placeholders={"masked_key": masked, "account": account},
+        )
+
+    async def async_step_remove_key(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Forget the stored API key. The provider key is not revoked."""
+        entry = self.config_entry
+        if user_input is None:
+            masked, account = await _identity(self.hass, entry)
+            return self.async_show_form(
+                step_id="remove_key",
+                data_schema=vol.Schema({}),
+                description_placeholders={"masked_key": masked, "account": account},
+            )
+        return await _async_forget_key(self, entry)
+
+    async def _async_probe_models(self) -> str | None:
+        """List models. Return an error key, or None when the list loaded."""
+        assert self._plain_api_key is not None
+        assert self._api_provider is not None
+        assert self._resolved_base is not None
+        try:
+            client = create_chat_provider(
+                self._api_provider,
+                session=async_get_clientsession(self.hass),
+                api_key=self._plain_api_key,
+                base_url=self._resolved_base,
+            )
+            self._api_models = await client.async_list_models()
+            return None
+        except ProviderAuthError:
+            self._api_models = []
+            _LOGGER.warning(
+                "Model list rejected the API key (provider=%s)", self._api_provider
+            )
+            return "provider_auth"
+        except ProviderAPIError as err:
+            self._api_models = []
+            _LOGGER.warning(
+                "Model list failed (provider=%s, HTTP %s)",
+                self._api_provider,
+                err.status,
+            )
+            if err.status == 404:
+                return "provider_no_models"
+            return "provider_connect"
+        except ValueError:
+            self._api_models = []
+            return "invalid_url"
+        except Exception:
+            self._api_models = []
+            _LOGGER.warning("Model list failed (provider=%s)", self._api_provider)
+            return "unknown"
+
+    async def _async_create_api_entry(
+        self,
+        parsed: Any,
+        model: str,
+        prompt: str,
+        llm_api: list[str] | None,
+    ) -> ConfigFlowResult:
+        assert self._plain_api_key is not None
+        assert self._api_provider is not None
+        api_key = self._plain_api_key
+        provider = self._api_provider
+        unique_id = api_provider_unique_id(provider, api_key)
+        existing = await self.async_set_unique_id(unique_id)
+        if existing is not None:
+            self._plain_api_key = None
+            return self.async_abort(reason="provider_already_configured")
+        data = {
+            CONF_PROVIDER: provider,
+            CONF_API_KEY_ENCRYPTED: await async_encrypt(self.hass, api_key),
+        }
+        models = list(self._api_models or [])
+        if model not in models:
+            models.append(model)
+        options: dict[str, Any] = {
+            CONF_CONNECTION_MODE: parsed.mode,
+            CONF_MODEL: model,
+            CONF_AVAILABLE_MODELS: models,
+        }
+        if parsed.mode == CONNECTION_COMPATIBLE:
+            options[CONF_BASE_URL] = parsed.base_url
+        if prompt:
+            options[CONF_PROMPT] = prompt
+        if llm_api:
+            options[CONF_LLM_HASS_API] = llm_api
+        title = masked_provider_title(provider, api_key)
+        self._plain_api_key = None
+        return self.async_create_entry(title=title, data=data, options=options)
+
+
+class SmartLLMConfigFlow(ConfigFlow, _CursorBrowserLogin, _ApiKeySetup, domain=DOMAIN):
+    """Walk the user through provider choice, sign-in, and model selection."""
 
     VERSION = 1
 
@@ -195,7 +602,7 @@ class SmartLLMConfigFlow(ConfigFlow, _CursorBrowserLogin, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Choose a provider. Version 1 offers Cursor."""
+        """Choose Cursor, OpenAI, or Anthropic."""
         return self.async_show_menu(
             step_id="user",
             menu_options=provider_menu_options(),
@@ -210,8 +617,13 @@ class SmartLLMConfigFlow(ConfigFlow, _CursorBrowserLogin, domain=DOMAIN):
     async def async_step_reauth(
         self, entry_data: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Start a new browser login for an existing entry."""
-        return await self.async_step_cursor_link()
+        """Start browser login, or ask for a new API key."""
+        entry = self._get_reauth_entry()
+        provider = entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
+        if provider == PROVIDER_CURSOR:
+            return await self.async_step_cursor_link()
+        self._api_provider = provider
+        return await self.async_step_update_key()
 
     def _display_account(self) -> str:
         """Masked account, including during reauth before a new login exists."""
@@ -310,7 +722,7 @@ class SmartLLMConfigFlow(ConfigFlow, _CursorBrowserLogin, domain=DOMAIN):
         except CursorAuthError:
             self._models = []
             self._model_error = "invalid_auth"
-        except (CursorAPIError, ValueError):
+        except (ProviderAPIError, ValueError):
             self._models = []
             self._model_error = "no_models"
 
@@ -345,8 +757,8 @@ class SmartLLMConfigFlow(ConfigFlow, _CursorBrowserLogin, domain=DOMAIN):
         return SmartLLMOptionsFlow()
 
 
-class SmartLLMOptionsFlow(OptionsFlow, _CursorBrowserLogin):
-    """Change the model, refresh Bridge models, re-authorize, switch, or log out."""
+class SmartLLMOptionsFlow(OptionsFlow, _CursorBrowserLogin, _ApiKeySetup):
+    """Change the model, refresh models, re-authorize, switch, or log out."""
 
     _refresh_task: asyncio.Task[None] | None = None
     _refreshed_models: list[str] | None = None
@@ -367,15 +779,20 @@ class SmartLLMOptionsFlow(OptionsFlow, _CursorBrowserLogin):
     ) -> ConfigFlowResult:
         """Show what is stored, without revealing the API key or full email."""
         masked, account = await _identity(self.hass, self.config_entry)
-        return self.async_show_menu(
-            step_id="init",
-            menu_options=[
+        provider = self.config_entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
+        if provider == PROVIDER_CURSOR:
+            menu = [
                 "settings",
                 "refresh_models",
                 "reauth",
                 "switch_account",
                 "logout",
-            ],
+            ]
+        else:
+            menu = ["api_settings", "refresh_models", "update_key", "remove_key"]
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=menu,
             description_placeholders={"masked_key": masked, "account": account},
         )
 
@@ -448,46 +865,62 @@ class SmartLLMOptionsFlow(OptionsFlow, _CursorBrowserLogin):
     async def async_step_refresh_models(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Fetch ``GET /v1/models`` and then return to the settings form."""
+        """Fetch the model list and then return to the settings form."""
         if not self.config_entry.data.get(CONF_API_KEY_ENCRYPTED):
             return self.async_abort(reason="logged_out")
+        provider = self.config_entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
         if self._refresh_task is None:
             self._refresh_task = self.hass.async_create_task(self._async_refresh_models())
         if not self._refresh_task.done():
+            action = (
+                "refresh_models" if provider == PROVIDER_CURSOR else "refresh_api_models"
+            )
             return self.async_show_progress(
                 step_id="refresh_models",
-                progress_action="refresh_models",
+                progress_action=action,
                 progress_task=self._refresh_task,
             )
-        return self.async_show_progress_done(next_step_id="settings")
+        next_step = "settings" if provider == PROVIDER_CURSOR else "api_settings"
+        return self.async_show_progress_done(next_step_id=next_step)
 
     async def _async_refresh_models(self) -> None:
+        provider = self.config_entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
         try:
             api_key = await async_decrypt(
                 self.hass, self.config_entry.data[CONF_API_KEY_ENCRYPTED]
             )
-            base_url = self.config_entry.options.get(
-                CONF_BRIDGE_BASE_URL, DEFAULT_BRIDGE_BASE_URL
-            )
-            client = CursorBridgeClient(
-                async_get_clientsession(self.hass),
+            base_url = resolve_base_url(provider, self.config_entry.options)
+            client = create_chat_provider(
+                provider,
+                session=async_get_clientsession(self.hass),
                 api_key=api_key,
                 base_url=base_url,
             )
-            self._refreshed_models = _ensure_default_model(await client.async_list_models())
+            models = await client.async_list_models()
+            if provider == PROVIDER_CURSOR:
+                models = _ensure_default_model(models)
+            self._refreshed_models = models
             self._refresh_error = None
-        except (CursorAuthError, DecryptionError):
-            self._refresh_error = "invalid_auth"
-        except (CursorAPIError, ValueError):
-            self._refresh_error = "cannot_connect"
+        except (ProviderAuthError, DecryptionError):
+            self._refresh_error = (
+                "invalid_auth" if provider == PROVIDER_CURSOR else "provider_auth"
+            )
+        except (ProviderAPIError, ValueError):
+            self._refresh_error = (
+                "cannot_connect" if provider == PROVIDER_CURSOR else "provider_connect"
+            )
         except Exception:
             self._refresh_error = "unknown"
-            _LOGGER.exception("Refreshing Cursor Bridge models failed")
+            _LOGGER.exception("Refreshing models failed (provider=%s)", provider)
 
     async def async_step_reauth(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Mint a new API key for the same Cursor account."""
+        """Mint a new Cursor key, or replace an OpenAI/Anthropic key."""
+        provider = self.config_entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
+        if provider != PROVIDER_CURSOR:
+            self._api_provider = provider
+            return await self.async_step_update_key()
         self._switching_account = False
         self._link_step_id = "cursor_link"
         return await self.async_step_cursor_link()
@@ -524,12 +957,7 @@ class SmartLLMOptionsFlow(OptionsFlow, _CursorBrowserLogin):
                 data_schema=vol.Schema({}),
                 description_placeholders={"masked_key": masked, "account": account},
             )
-        self._switching_account = False
-        clear_account_switch(self.hass.data, self.config_entry.entry_id)
-        _forget_credentials(self.hass, self.config_entry)
-        if self.config_entry.state is not ConfigEntryState.LOADED:
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-        return self.async_abort(reason="logged_out")
+        return await _async_forget_key(self, self.config_entry)
 
     async def _async_begin_account_switch(self) -> None:
         """Drop the stored key before the replacement login starts."""
@@ -662,9 +1090,66 @@ async def _credential_data(hass: Any, result: LoginResult) -> dict[str, Any]:
     return data
 
 
+def _flow_entry(flow: Any) -> ConfigEntry:
+    """Return the entry being edited. Reauth flows do not set ``config_entry``."""
+    entry = getattr(flow, "config_entry", None)
+    if entry is not None:
+        return entry
+    return flow._get_reauth_entry()
+
+
+def _display_base_url(provider: str, options: Mapping[str, Any]) -> str:
+    try:
+        return resolve_base_url(provider, options)
+    except ValueError:
+        return ""
+
+
+async def _async_forget_key(flow: Any, entry: ConfigEntry) -> ConfigFlowResult:
+    """Drop the encrypted key and any stored email. The provider key stays valid."""
+    if getattr(flow, "_switching_account", False):
+        flow._switching_account = False
+    clear_account_switch(flow.hass.data, entry.entry_id)
+    _forget_credentials(flow.hass, entry)
+    if entry.state is not ConfigEntryState.LOADED:
+        await flow.hass.config_entries.async_reload(entry.entry_id)
+    return flow.async_abort(reason="logged_out")
+
+
+async def _async_replace_api_key(
+    flow: Any, entry: ConfigEntry, api_key: str
+) -> ConfigFlowResult:
+    """Store a new encrypted API key. The plaintext is not written to the entry."""
+    provider = entry.data.get(CONF_PROVIDER, PROVIDER_OPENAI)
+    new_unique_id = api_provider_unique_id(provider, api_key)
+    for other in flow.hass.config_entries.async_entries(DOMAIN):
+        if other.entry_id != entry.entry_id and other.unique_id == new_unique_id:
+            return flow.async_abort(reason="provider_already_configured")
+    data = dict(entry.data)
+    data[CONF_PROVIDER] = provider
+    data[CONF_API_KEY_ENCRYPTED] = await async_encrypt(flow.hass, api_key)
+    data.pop(CONF_API_KEY_EXPIRES_AT, None)
+    was_loaded = entry.state is ConfigEntryState.LOADED
+    flow.hass.config_entries.async_update_entry(
+        entry,
+        data=data,
+        unique_id=new_unique_id,
+        title=masked_provider_title(provider, api_key),
+    )
+    if not was_loaded:
+        await flow.hass.config_entries.async_reload(entry.entry_id)
+    if getattr(flow, "source", None) == SOURCE_REAUTH:
+        return flow.async_abort(reason="reauth_successful")
+    return flow.async_abort(reason="api_key_updated")
+
+
 async def _identity(hass: Any, entry: ConfigEntry) -> tuple[str, str]:
     encrypted = entry.data.get(CONF_API_KEY_ENCRYPTED)
-    account = display_account(entry.data.get(CONF_EMAIL))
+    provider = entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
+    if provider == PROVIDER_CURSOR:
+        account = display_account(entry.data.get(CONF_EMAIL))
+    else:
+        account = PROVIDER_LABELS.get(provider, provider)
     if not encrypted:
         return "—", account
     try:
@@ -686,11 +1171,9 @@ def _parse_settings(
         )
     except ValueError:
         errors[CONF_BRIDGE_BASE_URL] = "invalid_url"
-    raw_model = str(user_input.get(CONF_MODEL, "")).strip()
-    if not raw_model or any(char.isspace() for char in raw_model):
+    model = parse_model_id(user_input.get(CONF_MODEL))
+    if model is None:
         errors[CONF_MODEL] = "invalid_model"
-    else:
-        model = raw_model
     if require_acknowledgement and not user_input.get(CONF_ACKNOWLEDGE_BRIDGE):
         errors[CONF_ACKNOWLEDGE_BRIDGE] = "bridge_not_acknowledged"
     prompt = str(user_input.get(CONF_PROMPT) or "").strip()
@@ -742,6 +1225,65 @@ def _settings_schema(
     )
     if include_acknowledgement:
         fields[vol.Required(CONF_ACKNOWLEDGE_BRIDGE, default=False)] = bool
+    return vol.Schema(fields)
+
+
+def _connection_selector() -> SelectSelector:
+    return SelectSelector(
+        SelectSelectorConfig(
+            options=[CONNECTION_OFFICIAL, CONNECTION_COMPATIBLE],
+            translation_key="connection_mode",
+            mode=SelectSelectorMode.LIST,
+        )
+    )
+
+
+def _model_selector(models: list[str]) -> Any:
+    if not models:
+        return str
+    return SelectSelector(
+        SelectSelectorConfig(
+            options=models,
+            custom_value=True,
+            mode=SelectSelectorMode.DROPDOWN,
+        )
+    )
+
+
+def _api_key_schema() -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(CONF_API_KEY): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.PASSWORD)
+            ),
+            vol.Required(
+                CONF_CONNECTION_MODE, default=CONNECTION_OFFICIAL
+            ): _connection_selector(),
+            vol.Optional(CONF_BASE_URL): str,
+        }
+    )
+
+
+def _provider_model_schema(hass: Any, models: list[str]) -> vol.Schema:
+    fields: dict[Any, Any] = {
+        vol.Required(
+            CONF_CONNECTION_MODE, default=CONNECTION_OFFICIAL
+        ): _connection_selector(),
+        vol.Optional(CONF_BASE_URL): str,
+        vol.Required(CONF_MODEL): _model_selector(models),
+    }
+    apis = _llm_api_options(hass)
+    if apis:
+        fields[vol.Optional(CONF_LLM_HASS_API)] = SelectSelector(
+            SelectSelectorConfig(
+                options=apis,
+                multiple=True,
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        )
+    fields[vol.Optional(CONF_PROMPT)] = TextSelector(
+        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+    )
     return vol.Schema(fields)
 
 

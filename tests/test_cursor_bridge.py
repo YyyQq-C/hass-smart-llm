@@ -38,7 +38,8 @@ def test_normalize_bridge_base_url() -> None:
     for bad in ("", "javascript:alert(1)", "https://user:secret@cursorbridge.dev/v1"):
         try:
             normalize_bridge_base_url(bad)
-        except ValueError:
+        except ValueError as err:
+            assert "Cursor Bridge URL" in str(err)
             continue
         raise AssertionError(f"expected {bad!r} to be rejected")
 
@@ -201,12 +202,12 @@ def test_bridge_auth_and_api_errors() -> None:
 def test_unknown_provider_is_rejected() -> None:
     try:
         create_chat_provider(
-            "openai",
+            "unknown-provider",
             session=None,  # type: ignore[arg-type]
             api_key="sk-test",
             base_url="https://api.openai.com/v1",
         )
     except ValueError as err:
-        assert "openai" in str(err)
+        assert "unknown-provider" in str(err)
     else:
         raise AssertionError("expected unknown provider")

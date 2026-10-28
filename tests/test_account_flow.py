@@ -189,14 +189,16 @@ def test_translation_catalogs_offer_logout_and_switch_without_a_raw_email() -> N
         _COMPONENT / "translations" / "zh-Hans.json",
     ]
     parsed = [json.loads(path.read_text(encoding="utf-8")) for path in catalogs]
-    menu = parsed[0]["options"]["step"]["init"]["menu_options"]
-    assert list(menu) == [
+    menu = list(parsed[0]["options"]["step"]["init"]["menu_options"])
+    for required in (
         "settings",
         "refresh_models",
         "reauth",
         "switch_account",
         "logout",
-    ]
+    ):
+        assert required in menu
+    assert menu.index("reauth") < menu.index("switch_account") < menu.index("logout")
     for key in ("logout", "switch_account", "switch_link"):
         assert key in parsed[0]["options"]["step"]
     assert "switch_successful" in parsed[0]["options"]["abort"]

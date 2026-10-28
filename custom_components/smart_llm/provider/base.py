@@ -30,8 +30,9 @@ class ChatProvider(ABC):
 
     Add a provider by subclassing this and registering it in
     ``provider.registry``. Authentication stays with the provider: Cursor uses
-    the browser handshake, while a future OpenAI or Claude provider can collect
-    an API key directly.
+    the browser handshake. OpenAI and Anthropic collect an API key and send it
+    in the provider's standard header, either to the official host or to a
+    custom base URL.
     """
 
     id: str
