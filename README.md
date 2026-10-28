@@ -5,22 +5,20 @@
 ![Smart LLM](images/icon.png)
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![Release](https://img.shields.io/github/v/release/YyyQq-C/hass-smart-llm?label=release)](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.0)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.1%2B-41BDF5)](https://www.home-assistant.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Pluggable conversation agent for Home Assistant Assist. It connects **Cursor**, **OpenAI**, and **Anthropic** through one provider interface.
+Pluggable conversation agent for Home Assistant Assist. The current release, [v1.1.0](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.0), connects **Cursor**, **OpenAI**, and **Anthropic**. Each provider is its own conversation entity under Settings → Voice assistants.
 
-The domain is `smart_llm`. After setup, the agent is available under Settings → Voice assistants.
+The domain is `smart_llm`. The integration manifest version is `1.1.0`.
 
 ## Features
 
-- Cursor sign-in in the browser, using the same PKCE handshake as the Cursor TypeScript SDK and `agent login`.
-- A minted user API key, stored encrypted on this Home Assistant install. Screens show a mask such as `crsr_••••••••wxyz`.
-- Account addresses are masked in the UI (`yongqc@gmail.com` is shown as `y**@g**.com`). The Assist agent is named **Cursor**, with no email in the name.
-- OpenAI and Anthropic API keys. Each one can call the official API, or the same key header against a custom base URL. Screens show a mask such as `sk••••••••wxyz`.
-- Model list and Assist replies. Cursor uses an OpenAI-compatible Bridge URL.
-- A conversation entity, with optional Home Assistant tools.
-- Log out, or switch to another Cursor account, from the integration options.
+- **Cursor.** Browser sign-in uses the same PKCE handshake as the Cursor TypeScript SDK and `agent login`. Home Assistant stores a minted user API key, encrypted on this install. Account screens show a mask such as `y**@g**.com`. Log out or switch account from the integration options. The entry title and the Assist entity stay **Cursor**.
+- **OpenAI and Anthropic.** Paste an API key and choose a request style: the official API, or a custom base URL. Custom hosts include Azure OpenAI, OpenRouter, a local OpenAI-compatible proxy, and an Anthropic-compatible gateway. The key stays in that provider's usual header.
+- **Encrypted keys.** Cursor, OpenAI, and Anthropic keys are Fernet-encrypted with a key derived from this install (`.storage/core.uuid`). Screens and diagnostics show a mask. Keys are not written to logs.
+- One conversation entity per config entry, with optional Home Assistant tools.
 
 ## Install
 
@@ -46,6 +44,16 @@ You can also add the repository from My Home Assistant when HACS is already inst
 
 That link only opens this custom repository. It does not mean Smart LLM is in the default HACS store.
 
+### Update
+
+To install [v1.1.0](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.0) or a later release on an existing setup, update inside HACS. Leave the custom repository and the Smart LLM config entries in place.
+
+1. Open HACS → Integrations → **Smart LLM**.
+2. When HACS offers a newer version, choose **Update**. To fetch the current release again, open the menu and choose **Redownload**.
+3. Restart Home Assistant.
+
+The restart loads the new files. Cursor logins, API keys, and model settings already stored in Home Assistant stay on their config entries.
+
 ### Manual
 
 Copy the integration into your configuration directory, then restart Home Assistant. The manifest should land here:
@@ -53,6 +61,8 @@ Copy the integration into your configuration directory, then restart Home Assist
 ```text
 config/custom_components/smart_llm/manifest.json
 ```
+
+Replace that directory with the new release, then restart, when you update without HACS.
 
 ## Authorize Cursor
 
@@ -62,9 +72,11 @@ config/custom_components/smart_llm/manifest.json
 4. Submit. Home Assistant polls until login finishes, then mints a user API key named `Home Assistant Smart LLM` (90 days).
 5. Confirm that Cursor Bridge is unofficial, then pick a model. `default` lets Cursor choose.
 
-The browser session token is discarded after minting. Home Assistant stores only the API key, encrypted with a key derived from this install's instance id (`.storage/core.uuid`). Diagnostics and the entity attribute show the mask.
+The browser session token is discarded after minting. Home Assistant stores only the API key, encrypted with a key derived from this install's instance id (`.storage/core.uuid`). Diagnostics and the entity attribute show the mask, such as `crsr_••••••••wxyz`.
 
 If team policy blocks user API keys, login can succeed and minting can still fail. A team admin has to allow user keys.
+
+The same Cursor account cannot be added twice. The device page links to the [Cursor dashboard](https://cursor.com/dashboard).
 
 ### Options
 
@@ -80,41 +92,53 @@ Open the integration options to change how Assist calls Cursor.
 
 The options screens show the account as a mask such as `y**@g**.com`, never the full address. The voice assistant card and the integration title stay **Cursor**.
 
-Logging out does not revoke the key in the Cursor dashboard. Revoke it there if it should stop working immediately. The entry then needs authorization again before Assist can use this agent. Switching accounts signs out first, then uses the same browser login as the first setup. Re-authorize still expects the same Cursor account.
+Logging out removes the key from Home Assistant. The key remains valid in the Cursor dashboard until it expires or you revoke it there. The entry then needs authorization again before Assist can use this agent. Switching accounts signs out first, then uses the same browser login as the first setup. Re-authorize still expects the same Cursor account.
 
-## Add OpenAI
+## OpenAI and Anthropic
 
-1. Add the Smart LLM integration and choose **OpenAI**.
-2. Paste an API key. It is encrypted with the same install-bound Fernet key as a Cursor key. The form shows a mask after setup.
-3. Choose a request style:
-   - **Official API (key in header).** Requests go to `https://api.openai.com/v1` with `Authorization: Bearer`.
-   - **Custom base URL.** The same `Authorization: Bearer` header is sent to a base URL you enter. Use this for Azure OpenAI, OpenRouter, or a local OpenAI-compatible proxy. Include the `/v1` prefix when the host path is not empty, for example `https://openrouter.ai/api/v1`.
-4. Pick a model. If the model list cannot be loaded, type a model id.
+Add **Smart LLM** again and choose **OpenAI** or **Anthropic**. Each choice is its own config entry. The Assist entity is named **OpenAI** or **Anthropic**. The integration entry title includes the provider name and a key mask.
 
-Options can change the request style, base URL, and model, replace the key, or remove it from Home Assistant. Removing the key does not revoke it at OpenAI.
+1. Paste the API key. It is stored encrypted. Later screens show a mask: the first two characters, eight dots, and the last four characters.
+2. Choose a request style (below), then pick a model. If the list is empty, type a model id. When no list has been loaded, the form suggests `gpt-4o-mini` for OpenAI and `claude-sonnet-4-5` for Anthropic.
+3. Optionally set Assist tools and extra instructions.
 
-## Add Anthropic
+The same API key cannot be added on a second entry. Device pages link to [OpenAI API keys](https://platform.openai.com/api-keys) and [Anthropic API keys](https://console.anthropic.com/settings/keys).
 
-1. Add the integration and choose **Anthropic**.
-2. Paste an API key. Storage and masking match OpenAI.
-3. Choose a request style:
-   - **Official API (key in header).** Requests go to `https://api.anthropic.com` with `x-api-key` and `anthropic-version`. Chat uses `POST /v1/messages`.
-   - **Custom base URL.** The same headers are sent to an Anthropic-compatible gateway. Paste the host root; a trailing `/v1` is removed.
-4. Pick a model.
+### Request styles
 
-An OpenAI-compatible Claude proxy belongs on the OpenAI provider with a custom base URL. The Anthropic provider speaks the Messages API.
+Both providers offer the same two styles. Official mode ignores a custom URL and uses the provider default. Custom base URL keeps that provider's header and sends it to the host you enter.
 
-Options can change the request style, base URL, and model, replace the key, or remove it. Removing the key does not revoke it in the Anthropic console.
+| Style | OpenAI | Anthropic |
+| --- | --- | --- |
+| Official API | `Authorization: Bearer` against `https://api.openai.com/v1` (`GET /models`, `POST /chat/completions` on that base) | `x-api-key` and `anthropic-version: 2023-06-01` against `https://api.anthropic.com` (`GET /v1/models`, `POST /v1/messages`) |
+| Custom base URL | The same `Authorization: Bearer` header, sent to your host: Azure OpenAI, OpenRouter, or a local OpenAI-compatible proxy | The same `x-api-key` and `anthropic-version` headers, sent to an Anthropic-compatible gateway |
+
+A custom URL must be `http` or `https` and must not include a username or password. An OpenAI-compatible paste is normalized so the base ends at `/v1` (`https://openrouter.ai/api/v1/chat/completions` becomes `https://openrouter.ai/api/v1`). An Anthropic-compatible paste is the host; a trailing `/v1` or `/v1/messages` is accepted and requests are still `POST /v1/messages`.
+
+### Options
+
+Open the options on an OpenAI or Anthropic entry.
+
+| Action | What it does |
+| --- | --- |
+| Model and base URL | Official API or custom base URL, then the model, Assist tools, and extra instructions |
+| Refresh models | Request the model list from the configured endpoint |
+| Update API key | Replace the stored key. The previous key is overwritten only after the new key is accepted |
+| Remove API key | Remove the stored key from Home Assistant |
+
+Remove API key leaves the key valid at the provider. Revoke it there if it should stop working immediately. Cursor actions (re-authorize, switch account, log out) appear only on a Cursor entry.
 
 ## Assist setup
 
 1. Go to Settings → Voice assistants → Add assistant, or edit an existing one.
-2. Set the conversation agent to the entity this integration created. Cursor, OpenAI, and Anthropic each get their own entity.
+2. Set the conversation agent to the **Cursor**, **OpenAI**, or **Anthropic** entity this integration created.
 3. Save, then talk to Assist from the panel or a voice satellite.
 
 Leave **Control Home Assistant** empty for text-only replies. Choose an Assist API there when the model should control devices.
 
 ## Cursor Bridge
+
+This section is the Cursor provider. OpenAI official mode calls `https://api.openai.com/v1`. Anthropic official mode calls `https://api.anthropic.com`.
 
 Assist does not call an official Cursor chat API. After login, completions go to the Bridge base URL you configure:
 
@@ -126,13 +150,13 @@ https://cursorbridge.dev/v1
 
 - Prompts and the API key are sent to that host. Whoever operates the URL can read them.
 - Use your own Cursor account, and stay within its plan limits.
-- Point the base URL at another OpenAI-compatible endpoint in the integration options if you do not want the default host.
+- Point the base URL at another OpenAI-compatible endpoint in the integration options if you do not want the default host. That Cursor field is separate from the OpenAI and Anthropic request styles above.
 
 Browser login still uses Cursor's own portal and `api2.cursor.sh`.
 
-## Provider extensibility
+## Provider interface
 
-Cursor, OpenAI, and Anthropic are registered in `provider/registry.py`. Another provider implements `ChatProvider` in `custom_components/smart_llm/provider/base.py`, registers there, and adds a config-flow step for its own sign-in. Do not reuse the Cursor browser login for a provider that expects a pasted API key.
+[v1.1.0](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.0) registers Cursor, OpenAI, and Anthropic. Another provider implements `ChatProvider` in `custom_components/smart_llm/provider/base.py`, registers in `provider/registry.py`, and adds its own config-flow step. Cursor keeps the browser login. A provider that expects a pasted API key sends that key in its own header.
 
 ## License
 
