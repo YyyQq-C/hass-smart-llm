@@ -8,7 +8,7 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.1%2B-41BDF5)](https://www.home-assistant.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Pluggable conversation agent for Home Assistant Assist. Version 1 connects **Cursor**. Later providers such as OpenAI or Claude can use the same provider interface.
+Pluggable conversation agent for Home Assistant Assist. It connects **Cursor**, **OpenAI**, and **Anthropic** through one provider interface.
 
 The domain is `smart_llm`. After setup, the agent is available under Settings → Voice assistants.
 
@@ -17,7 +17,8 @@ The domain is `smart_llm`. After setup, the agent is available under Settings �
 - Cursor sign-in in the browser, using the same PKCE handshake as the Cursor TypeScript SDK and `agent login`.
 - A minted user API key, stored encrypted on this Home Assistant install. Screens show a mask such as `crsr_••••••••wxyz`.
 - Account addresses are masked in the UI (`yongqc@gmail.com` is shown as `y**@g**.com`). The Assist agent is named **Cursor**, with no email in the name.
-- Model list and Assist replies through an OpenAI-compatible Cursor Bridge URL.
+- OpenAI and Anthropic API keys. Each one can call the official API, or the same key header against a custom base URL. Screens show a mask such as `sk••••••••wxyz`.
+- Model list and Assist replies. Cursor uses an OpenAI-compatible Bridge URL.
 - A conversation entity, with optional Home Assistant tools.
 - Log out, or switch to another Cursor account, from the integration options.
 
@@ -81,10 +82,34 @@ The options screens show the account as a mask such as `y**@g**.com`, never the 
 
 Logging out does not revoke the key in the Cursor dashboard. Revoke it there if it should stop working immediately. The entry then needs authorization again before Assist can use this agent. Switching accounts signs out first, then uses the same browser login as the first setup. Re-authorize still expects the same Cursor account.
 
+## Add OpenAI
+
+1. Add the Smart LLM integration and choose **OpenAI**.
+2. Paste an API key. It is encrypted with the same install-bound Fernet key as a Cursor key. The form shows a mask after setup.
+3. Choose a request style:
+   - **Official API (key in header).** Requests go to `https://api.openai.com/v1` with `Authorization: Bearer`.
+   - **Custom base URL.** The same `Authorization: Bearer` header is sent to a base URL you enter. Use this for Azure OpenAI, OpenRouter, or a local OpenAI-compatible proxy. Include the `/v1` prefix when the host path is not empty, for example `https://openrouter.ai/api/v1`.
+4. Pick a model. If the model list cannot be loaded, type a model id.
+
+Options can change the request style, base URL, and model, replace the key, or remove it from Home Assistant. Removing the key does not revoke it at OpenAI.
+
+## Add Anthropic
+
+1. Add the integration and choose **Anthropic**.
+2. Paste an API key. Storage and masking match OpenAI.
+3. Choose a request style:
+   - **Official API (key in header).** Requests go to `https://api.anthropic.com` with `x-api-key` and `anthropic-version`. Chat uses `POST /v1/messages`.
+   - **Custom base URL.** The same headers are sent to an Anthropic-compatible gateway. Paste the host root; a trailing `/v1` is removed.
+4. Pick a model.
+
+An OpenAI-compatible Claude proxy belongs on the OpenAI provider with a custom base URL. The Anthropic provider speaks the Messages API.
+
+Options can change the request style, base URL, and model, replace the key, or remove it. Removing the key does not revoke it in the Anthropic console.
+
 ## Assist setup
 
 1. Go to Settings → Voice assistants → Add assistant, or edit an existing one.
-2. Set the conversation agent to the **Cursor** entity this integration created.
+2. Set the conversation agent to the entity this integration created. Cursor, OpenAI, and Anthropic each get their own entity.
 3. Save, then talk to Assist from the panel or a voice satellite.
 
 Leave **Control Home Assistant** empty for text-only replies. Choose an Assist API there when the model should control devices.
@@ -107,7 +132,7 @@ Browser login still uses Cursor's own portal and `api2.cursor.sh`.
 
 ## Provider extensibility
 
-Version 1 registers Cursor only. Another provider implements `ChatProvider` in `custom_components/smart_llm/provider/base.py`, registers in `provider/registry.py`, and adds a config-flow step for its own sign-in. Do not reuse the Cursor browser login for a provider that expects a pasted API key.
+Cursor, OpenAI, and Anthropic are registered in `provider/registry.py`. Another provider implements `ChatProvider` in `custom_components/smart_llm/provider/base.py`, registers there, and adds a config-flow step for its own sign-in. Do not reuse the Cursor browser login for a provider that expects a pasted API key.
 
 ## License
 

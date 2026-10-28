@@ -8,7 +8,7 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.1%2B-41BDF5)](https://www.home-assistant.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Home Assistant Assist 的可插拔对话代理。当前版本接入 **Cursor**。OpenAI、Claude 等提供方可以沿用同一套提供方接口。
+Home Assistant Assist 的可插拔对话代理。当前接入 **Cursor**、**OpenAI** 和 **Anthropic**，共用同一套提供方接口。
 
 集成域名是 `smart_llm`。添加之后，可以在「设置 → 语音助手」里选这个代理。
 
@@ -17,7 +17,8 @@ Home Assistant Assist 的可插拔对话代理。当前版本接入 **Cursor**�
 - 在浏览器里登录 Cursor，握手方式与 Cursor TypeScript SDK 和 `agent login` 相同。
 - 签发用户 API 密钥，并加密保存在这套 Home Assistant 上。界面只显示掩码，例如 `crsr_••••••••wxyz`。
 - 界面里的账号地址会打码（`yongqc@gmail.com` 显示为 `y**@g**.com`）。Assist 代理名称是 **Cursor**，名称里不包含邮箱。
-- 通过 OpenAI 兼容的 Cursor Bridge 地址拉取模型列表、回答 Assist。
+- 填写 OpenAI 或 Anthropic 的 API 密钥。每家都可以走官方 API，也可以用同一套密钥请求头指向自定义基础 URL。界面掩码类似 `sk••••••••wxyz`。
+- 拉取模型列表并回答 Assist。Cursor 仍通过 OpenAI 兼容的 Bridge 地址。
 - 注册对话实体，可选把 Home Assistant 工具交给模型。
 - 在集成选项里退出登录，或切换到另一个 Cursor 账号。
 
@@ -81,10 +82,34 @@ config/custom_components/smart_llm/manifest.json
 
 退出登录不会在 Cursor 控制台里撤销这把密钥。若要立刻失效，请到控制台撤销。之后需要重新授权，Assist 才能继续使用这个代理。切换账号会先退出，再使用与首次安装相同的浏览器登录。重新授权仍然要求是同一个 Cursor 账号。
 
+## 添加 OpenAI
+
+1. 添加 Smart LLM，选择 **OpenAI**。
+2. 粘贴 API 密钥。加密方式与 Cursor 密钥相同，使用本机 Fernet 密钥。保存后界面只显示掩码。
+3. 选择请求方式：
+   - **官方 API（密钥放在请求头）。** 请求发到 `https://api.openai.com/v1`，请求头为 `Authorization: Bearer`。
+   - **自定义基础 URL。** 同一个 `Authorization: Bearer` 发到你填写的地址。可用于 Azure OpenAI、OpenRouter 或本地的 OpenAI 兼容代理。路径不为空时请带上 `/v1`，例如 `https://openrouter.ai/api/v1`。
+4. 选择模型。如果拉不到模型列表，可以手动填写模型 id。
+
+在选项里可以改请求方式、基础 URL 和模型，也可以替换或移除密钥。从 Home Assistant 移除密钥不会在 OpenAI 那边撤销它。
+
+## 添加 Anthropic
+
+1. 添加集成，选择 **Anthropic**。
+2. 粘贴 API 密钥。保存和掩码方式与 OpenAI 相同。
+3. 选择请求方式：
+   - **官方 API（密钥放在请求头）。** 请求发到 `https://api.anthropic.com`，请求头为 `x-api-key` 和 `anthropic-version`。对话使用 `POST /v1/messages`。
+   - **自定义基础 URL。** 同样的请求头发到 Anthropic 兼容网关。填写主机根地址；末尾的 `/v1` 会被去掉。
+4. 选择模型。
+
+如果 Claude 走的是 OpenAI 兼容代理，请用 OpenAI 提供方并填写自定义基础 URL。Anthropic 提供方使用 Messages API。
+
+在选项里可以改请求方式、基础 URL 和模型，也可以替换或移除密钥。移除密钥不会在 Anthropic 控制台里撤销它。
+
 ## 接到 Assist
 
 1. 打开「设置 → 语音助手」，添加助手或编辑已有助手。
-2. 对话代理选这个集成创建的 **Cursor** 实体。
+2. 对话代理选这个集成创建的实体。Cursor、OpenAI、Anthropic 会各自创建一个实体。
 3. 保存后，用 Assist 面板或语音卫星说话。
 
 「控制 Home Assistant」留空时，代理只回答文字。需要模型操作设备时，再选择一项 Assist API。
@@ -107,7 +132,7 @@ https://cursorbridge.dev/v1
 
 ## 扩展提供方
 
-当前版本只注册 Cursor。新的提供方需要实现 `custom_components/smart_llm/provider/base.py` 里的 `ChatProvider`，在 `provider/registry.py` 注册，并在配置流里加上自己的登录步骤。需要用户粘贴密钥的提供方，不要复用 Cursor 的浏览器登录。
+Cursor、OpenAI 和 Anthropic 已在 `provider/registry.py` 注册。新的提供方需要实现 `custom_components/smart_llm/provider/base.py` 里的 `ChatProvider`，在该注册表登记，并在配置流里加上自己的登录步骤。需要用户粘贴密钥的提供方，不要复用 Cursor 的浏览器登录。
 
 ## 许可
 

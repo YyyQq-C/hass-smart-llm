@@ -17,17 +17,19 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     AGENT_NAME,
-    CONF_BRIDGE_BASE_URL,
+    CONF_CONNECTION_MODE,
     CONF_MODEL,
     CONF_PROVIDER,
-    DEFAULT_BRIDGE_BASE_URL,
-    DEFAULT_MODEL,
+    CONNECTION_OFFICIAL,
     DOMAIN,
     MAX_TOOL_ITERATIONS,
+    PROVIDER_CONFIG_URL,
     PROVIDER_CURSOR,
+    PROVIDER_LABELS,
+    default_model_for,
 )
 from .provider.base import ChatResponse
-from .provider.errors import CursorAPIError, CursorAuthError
+from .provider.errors import ProviderAPIError, ProviderAuthError
 from .provider.messages import function_tool, openai_messages_from_contents
 
 _LOGGER = logging.getLogger(__name__)
@@ -37,6 +39,7 @@ PARALLEL_UPDATES = 0
 _MESSAGES = {
     "en": {
         "auth": "Smart LLM needs you to authorize Cursor again.",
+        "auth_api": "Smart LLM rejected the API key. Enter a new key in the integration options.",
         "api": "The model request failed: {detail}",
         "empty": "The model returned an empty response.",
         "tools": "The model could not finish the Home Assistant actions.",
@@ -44,6 +47,7 @@ _MESSAGES = {
     },
     "zh": {
         "auth": "Smart LLM 需要你重新授权 Cursor。",
+        "auth_api": "Smart LLM 拒绝了这把 API 密钥。请在集成选项里填写新密钥。",
         "api": "模型请求失败：{detail}",
         "empty": "模型返回了空回复。",
         "tools": "模型没能完成 Home Assistant 操作。",
@@ -70,17 +74,19 @@ class SmartLLMConversationEntity(conversation.ConversationEntity):
     def __init__(self, entry: ConfigEntry) -> None:
         """Initialize the agent from a config entry."""
         self._entry = entry
-        # The Assist card uses this name. Older entry titles embedded the
-        # Cursor email, so the visible name is always the generic label.
-        self._attr_name = AGENT_NAME
         self._attr_unique_id = entry.entry_id
         provider = entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
+        # Older Cursor titles embedded the email, so that agent stays generic.
+        if provider == PROVIDER_CURSOR:
+            self._attr_name = AGENT_NAME
+        else:
+            self._attr_name = PROVIDER_LABELS.get(provider, provider)
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=AGENT_NAME,
+            name=self._attr_name,
             manufacturer="Smart LLM",
-            model="Cursor" if provider == PROVIDER_CURSOR else provider,
-            configuration_url="https://cursor.com/dashboard",
+            model=PROVIDER_LABELS.get(provider, provider),
+            configuration_url=PROVIDER_CONFIG_URL.get(provider),
         )
         if entry.options.get(CONF_LLM_HASS_API):
             self._attr_supported_features = ConversationEntityFeature.CONTROL
@@ -94,14 +100,20 @@ class SmartLLMConversationEntity(conversation.ConversationEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Expose non-secret settings. The API key is masked."""
         runtime = self._entry.runtime_data
-        return {
-            "provider": self._entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR),
-            "model": self._entry.options.get(CONF_MODEL, DEFAULT_MODEL),
-            "bridge_base_url": self._entry.options.get(
-                CONF_BRIDGE_BASE_URL, DEFAULT_BRIDGE_BASE_URL
-            ),
+        provider = self._entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
+        attributes: dict[str, Any] = {
+            "provider": provider,
+            "model": self._entry.options.get(CONF_MODEL, default_model_for(provider)),
+            "base_url": runtime.base_url,
             "api_key_masked": runtime.masked_key,
         }
+        if provider == PROVIDER_CURSOR:
+            attributes["bridge_base_url"] = runtime.base_url
+        else:
+            attributes["connection_mode"] = self._entry.options.get(
+                CONF_CONNECTION_MODE, CONNECTION_OFFICIAL
+            )
+        return attributes
 
     async def async_added_to_hass(self) -> None:
         """Register this entity as an Assist agent."""
@@ -136,7 +148,8 @@ class SmartLLMConversationEntity(conversation.ConversationEntity):
         if runtime is None:
             return _failure(user_input, "setup")
 
-        model = self._entry.options.get(CONF_MODEL, DEFAULT_MODEL)
+        provider = self._entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
+        model = self._entry.options.get(CONF_MODEL, default_model_for(provider))
         try:
             for _iteration in range(MAX_TOOL_ITERATIONS):
                 messages = openai_messages_from_contents(chat_log.content)
@@ -157,11 +170,20 @@ class SmartLLMConversationEntity(conversation.ConversationEntity):
             else:
                 if chat_log.unresponded_tool_results:
                     return _failure(user_input, "tools")
-        except CursorAuthError:
-            _LOGGER.warning("Cursor rejected the stored API key")
+        except ProviderAuthError:
+            provider = self._entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
+            if provider == PROVIDER_CURSOR:
+                _LOGGER.warning("Cursor rejected the stored API key")
+                auth_key = "auth"
+            else:
+                _LOGGER.warning(
+                    "The provider rejected the stored API key (provider=%s)",
+                    provider,
+                )
+                auth_key = "auth_api"
             _start_reauth_once(self.hass, self._entry)
-            return _failure(user_input, "auth")
-        except CursorAPIError as err:
+            return _failure(user_input, auth_key)
+        except ProviderAPIError as err:
             _LOGGER.warning("Model request failed (HTTP %s)", err.status)
             return _failure(user_input, "api", detail=str(err))
 

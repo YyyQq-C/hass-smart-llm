@@ -25,6 +25,12 @@ _CREDENTIAL_FIELDS = (
 )
 
 
+def api_provider_unique_id(provider: str, api_key: str) -> str:
+    """Stable id for one pasted API key. The raw key is not part of the result."""
+    digest = hashlib.sha256(f"{provider}\0{api_key}".encode("utf-8")).hexdigest()
+    return f"{provider}-{digest[:16]}"
+
+
 def account_unique_id(email: str | None, api_key: str) -> str:
     """Stable id for one Cursor account. Email wins over a key fingerprint."""
     if email and "@" in email:

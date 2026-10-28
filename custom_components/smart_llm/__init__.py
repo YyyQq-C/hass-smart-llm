@@ -8,16 +8,15 @@ from typing import TYPE_CHECKING
 
 from .const import (
     CONF_API_KEY_ENCRYPTED,
-    CONF_BRIDGE_BASE_URL,
     CONF_EMAIL,
     CONF_PROVIDER,
-    DEFAULT_BRIDGE_BASE_URL,
     PROVIDER_CURSOR,
 )
 from .crypto import DecryptionError, mask_secret
 from .identity import account_switch_in_progress, display_account, public_title
 from .provider.base import ChatProvider
 from .provider.registry import create_chat_provider
+from .provider.urls import resolve_base_url
 from .secrets import async_decrypt
 
 if TYPE_CHECKING:
@@ -34,6 +33,7 @@ class SmartLLMRuntime:
     provider: ChatProvider
     masked_key: str
     email: str | None  # masked for display; never the full address
+    base_url: str
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -52,17 +52,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if account_switch_in_progress(hass.data, entry.entry_id):
             _LOGGER.info("Smart LLM is waiting for another Cursor account")
             return False
-        raise ConfigEntryAuthFailed("Cursor authorization required")
+        if provider_id == PROVIDER_CURSOR:
+            raise ConfigEntryAuthFailed("Cursor authorization required")
+        raise ConfigEntryAuthFailed("API key required")
 
     try:
         api_key = await async_decrypt(hass, encrypted)
     except DecryptionError as err:
-        raise ConfigEntryAuthFailed(
-            "Stored Cursor API key could not be decrypted"
-        ) from err
+        if provider_id == PROVIDER_CURSOR:
+            raise ConfigEntryAuthFailed(
+                "Stored Cursor API key could not be decrypted"
+            ) from err
+        raise ConfigEntryAuthFailed("Stored API key could not be decrypted") from err
 
-    base_url = entry.options.get(CONF_BRIDGE_BASE_URL, DEFAULT_BRIDGE_BASE_URL)
     try:
+        base_url = resolve_base_url(provider_id, entry.options)
         provider = create_chat_provider(
             provider_id,
             session=async_get_clientsession(hass),
@@ -70,13 +74,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             base_url=base_url,
         )
     except ValueError as err:
-        raise ConfigEntryError("Invalid Cursor Bridge URL") from err
+        if provider_id == PROVIDER_CURSOR:
+            raise ConfigEntryError("Invalid Cursor Bridge URL") from err
+        raise ConfigEntryError("Invalid API base URL") from err
 
     stored_email = entry.data.get(CONF_EMAIL)
     entry.runtime_data = SmartLLMRuntime(
         provider=provider,
         masked_key=mask_secret(api_key),
         email=display_account(stored_email) if stored_email else None,
+        base_url=base_url,
     )
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(

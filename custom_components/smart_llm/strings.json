@@ -3,12 +3,16 @@
     "step": {
       "user": {
         "title": "Provider",
-        "description": "Smart LLM connects Home Assistant Assist to a pluggable language model. This version supports Cursor.",
+        "description": "Smart LLM connects Home Assistant Assist to a pluggable language model. Choose Cursor, OpenAI, or Anthropic.",
         "menu_options": {
-          "cursor": "Cursor"
+          "cursor": "Cursor",
+          "openai": "OpenAI",
+          "anthropic": "Anthropic"
         },
         "menu_option_descriptions": {
-          "cursor": "Sign in with Cursor in your browser, then answer Assist through Cursor Bridge."
+          "cursor": "Sign in with Cursor in your browser, then answer Assist through Cursor Bridge.",
+          "openai": "Paste an OpenAI API key. Use the official API, or a custom base URL for a compatible proxy.",
+          "anthropic": "Paste an Anthropic API key. Use the official API, or a custom base URL for a compatible gateway."
         }
       },
       "cursor_link": {
@@ -41,6 +45,48 @@
           "prompt": "Added after the built-in Assist prompt.",
           "acknowledge_bridge": "Required before the API key is stored."
         }
+      },
+      "api_key": {
+        "title": "API key",
+        "description": "Connect {provider}. Official mode sends the key in the provider's standard header. Custom base URL keeps that header and sends requests to an endpoint you choose.",
+        "data": {
+          "api_key": "API key",
+          "connection_mode": "Request style",
+          "base_url": "Custom base URL"
+        },
+        "data_description": {
+          "api_key": "Stored encrypted on this Home Assistant. Later screens show only a mask.",
+          "connection_mode": "Official uses the provider cloud API. Custom base URL is for a compatible proxy or gateway.",
+          "base_url": "Used only when the request style is custom base URL. Leave empty for the official API."
+        }
+      },
+      "provider_model": {
+        "title": "Model",
+        "description": "{provider}. Stored API key: {masked_key}. Requests go to {base_url}.",
+        "data": {
+          "connection_mode": "Request style",
+          "base_url": "Custom base URL",
+          "model": "Model",
+          "llm_hass_api": "Control Home Assistant",
+          "prompt": "Extra instructions"
+        },
+        "data_description": {
+          "connection_mode": "Official uses the provider cloud API. Custom base URL keeps the same API key header and changes the host.",
+          "base_url": "Used only when the request style is custom base URL.",
+          "model": "Model id from the provider. You can type one if the list is empty.",
+          "llm_hass_api": "Optional. Exposes the selected Home Assistant tools to the model.",
+          "prompt": "Added after the built-in Assist prompt."
+        }
+      },
+      "update_key": {
+        "title": "Update API key",
+        "description": "Replace the stored key for {account}. Current mask: {masked_key}. The previous key is overwritten only after the new key is accepted.",
+        "data": {
+          "api_key": "API key"
+        },
+        "data_description": {
+          "api_key": "Stored encrypted. The previous value cannot be shown."
+        }
       }
     },
     "progress": {
@@ -55,10 +101,16 @@
       "invalid_url": "Enter an http or https URL without embedded credentials.",
       "invalid_model": "Enter a model id without spaces.",
       "no_models": "Could not load models. You can still type a model id such as default.",
-      "bridge_not_acknowledged": "Confirm that you understand Cursor Bridge is an unofficial service."
+      "bridge_not_acknowledged": "Confirm that you understand Cursor Bridge is an unofficial service.",
+      "invalid_api_key": "Enter an API key without spaces.",
+      "provider_auth": "The provider rejected this API key.",
+      "provider_connect": "Could not reach the API. Check the request style and try again.",
+      "provider_no_models": "Could not load models. You can still type a model id.",
+      "invalid_connection_mode": "Choose the official API or a custom base URL."
     },
     "abort": {
       "already_configured": "This Cursor account is already configured.",
+      "provider_already_configured": "This API key is already configured.",
       "reauth_successful": "Re-authorization successful.",
       "cancelled": "Authorization was cancelled.",
       "wrong_account": "That Cursor account does not match this integration entry.",
@@ -72,17 +124,23 @@
         "description": "Account: {account}. API key: {masked_key}.",
         "menu_options": {
           "settings": "Model and Bridge URL",
+          "api_settings": "Model and base URL",
           "refresh_models": "Refresh models",
           "reauth": "Re-authorize",
           "switch_account": "Switch account",
-          "logout": "Log out"
+          "update_key": "Update API key",
+          "logout": "Log out",
+          "remove_key": "Remove API key"
         },
         "menu_option_descriptions": {
           "settings": "Choose the model, Cursor Bridge URL, Assist tools, and extra instructions.",
-          "refresh_models": "Call GET /v1/models on the configured Cursor Bridge URL.",
+          "api_settings": "Choose the official API or a custom base URL, then the model, Assist tools, and extra instructions.",
+          "refresh_models": "Request the model list from the configured endpoint.",
           "reauth": "Open the Cursor login page and mint a new API key for this account.",
           "switch_account": "Sign out and link a different Cursor account.",
-          "logout": "Remove the stored API key from Home Assistant."
+          "update_key": "Replace the stored API key.",
+          "logout": "Remove the stored API key from Home Assistant.",
+          "remove_key": "Remove the stored API key from Home Assistant."
         }
       },
       "settings": {
@@ -134,11 +192,44 @@
       "logout": {
         "title": "Log out",
         "description": "This removes the stored API key for {account} ({masked_key}) from Home Assistant. Assist will ask you to sign in again. The key remains valid in the Cursor dashboard until it expires or you revoke it there."
+      },
+      "api_settings": {
+        "title": "Model and base URL",
+        "description": "{account}. API key: {masked_key}. Requests go to {base_url}.",
+        "data": {
+          "connection_mode": "Request style",
+          "base_url": "Custom base URL",
+          "model": "Model",
+          "llm_hass_api": "Control Home Assistant",
+          "prompt": "Extra instructions"
+        },
+        "data_description": {
+          "connection_mode": "Official uses the provider cloud API. Custom base URL keeps the same API key header and changes the host.",
+          "base_url": "Used only when the request style is custom base URL. Leave empty for the official API.",
+          "model": "Model id from the provider. You can type one if the list is empty.",
+          "llm_hass_api": "Optional. Exposes the selected Home Assistant tools to the model.",
+          "prompt": "Added after the built-in Assist prompt. Leave empty to remove extra instructions."
+        }
+      },
+      "update_key": {
+        "title": "Update API key",
+        "description": "Replace the stored key for {account}. Current mask: {masked_key}. The previous key is overwritten only after the new key is accepted.",
+        "data": {
+          "api_key": "API key"
+        },
+        "data_description": {
+          "api_key": "Stored encrypted. The previous value cannot be shown."
+        }
+      },
+      "remove_key": {
+        "title": "Remove API key",
+        "description": "This removes the stored API key for {account} ({masked_key}) from Home Assistant. The key is not revoked at the provider. Revoke it there if it should stop working immediately."
       }
     },
     "progress": {
       "authorize": "Waiting for browser approval. Login URL: {login_url}",
-      "refresh_models": "Loading models from Cursor Bridge."
+      "refresh_models": "Loading models from Cursor Bridge.",
+      "refresh_api_models": "Loading models from the configured API."
     },
     "error": {
       "cannot_connect": "Could not reach Cursor Bridge.",
@@ -149,16 +240,31 @@
       "invalid_url": "Enter an http or https URL without embedded credentials.",
       "invalid_model": "Enter a model id without spaces.",
       "no_models": "Could not load models. You can still type a model id such as default.",
-      "bridge_not_acknowledged": "Confirm that you understand Cursor Bridge is an unofficial service."
+      "bridge_not_acknowledged": "Confirm that you understand Cursor Bridge is an unofficial service.",
+      "invalid_api_key": "Enter an API key without spaces.",
+      "provider_auth": "The provider rejected this API key.",
+      "provider_connect": "Could not reach the API. Check the request style and try again.",
+      "provider_no_models": "Could not load models. You can still type a model id.",
+      "invalid_connection_mode": "Choose the official API or a custom base URL."
     },
     "abort": {
       "already_configured": "This Cursor account is already configured on another entry.",
+      "provider_already_configured": "This API key is already configured on another entry.",
       "reauth_successful": "Re-authorization successful.",
+      "api_key_updated": "API key updated.",
       "cancelled": "Authorization was cancelled.",
       "wrong_account": "That Cursor account does not match this integration entry.",
       "logged_out": "Logged out. Re-authorize before Assist can use Smart LLM again.",
       "switch_successful": "Switched Cursor accounts. The new API key is stored.",
       "unknown": "Authorization could not be saved."
+    }
+  },
+  "selector": {
+    "connection_mode": {
+      "options": {
+        "official": "Official API (key in header)",
+        "compatible": "Custom base URL"
+      }
     }
   }
 }

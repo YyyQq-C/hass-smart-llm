@@ -1,21 +1,24 @@
 """Registry of chat providers.
 
-Version 1 registers Cursor only. A later OpenAI or Claude provider implements
-``ChatProvider`` and adds one branch here, plus a config-flow step that knows
-how that provider authenticates.
+Cursor signs in through the browser. OpenAI and Anthropic take an API key and
+call either the official host or a custom base URL with the same header.
 """
 
 from __future__ import annotations
 
 from aiohttp import ClientSession
 
-from ..const import PROVIDER_CURSOR
+from ..const import PROVIDER_ANTHROPIC, PROVIDER_CURSOR, PROVIDER_OPENAI
+from .anthropic import AnthropicClient
 from .base import ChatProvider
 from .cursor_bridge import CursorBridgeClient
+from .openai_client import OpenAIClient
 
 # Menu step id → label. Config flow translations supply the user-facing copy.
 PROVIDER_STEPS: dict[str, str] = {
     PROVIDER_CURSOR: "Cursor",
+    PROVIDER_OPENAI: "OpenAI",
+    PROVIDER_ANTHROPIC: "Anthropic",
 }
 
 
@@ -34,4 +37,8 @@ def create_chat_provider(
     """Build the chat client for a stored config entry."""
     if provider_id == PROVIDER_CURSOR:
         return CursorBridgeClient(session, api_key=api_key, base_url=base_url)
+    if provider_id == PROVIDER_OPENAI:
+        return OpenAIClient(session, api_key=api_key, base_url=base_url)
+    if provider_id == PROVIDER_ANTHROPIC:
+        return AnthropicClient(session, api_key=api_key, base_url=base_url)
     raise ValueError(f"Unknown Smart LLM provider: {provider_id}")
