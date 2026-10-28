@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Provider",
-        "description": "Smart LLM connects Home Assistant Assist to a pluggable language model. Choose Cursor, OpenAI, or Anthropic.",
+        "description": "Smart LLM connects Home Assistant Assist to a pluggable language model. Cursor uses browser login. The OpenAI menu is OpenAI-compatible and the Anthropic menu is Anthropic-compatible: the official endpoint, or a custom base URL for any compatible host (Azure OpenAI, OpenRouter, a local proxy, or an Anthropic-compatible gateway).",
         "menu_options": {
           "cursor": "Cursor",
           "openai": "OpenAI",
@@ -11,8 +11,8 @@
         },
         "menu_option_descriptions": {
           "cursor": "Sign in with Cursor in your browser, then answer Assist through Cursor Bridge.",
-          "openai": "Paste an OpenAI API key. Use the official API, or a custom base URL for a compatible proxy.",
-          "anthropic": "Paste an Anthropic API key. Use the official API, or a custom base URL for a compatible gateway."
+          "openai": "OpenAI-compatible. Official endpoint, or a custom base URL for any compatible host such as Azure OpenAI, OpenRouter, or a local proxy.",
+          "anthropic": "Anthropic-compatible. Official endpoint, or a custom base URL for any Anthropic-compatible gateway."
         }
       },
       "cursor_link": {
@@ -48,7 +48,7 @@
       },
       "api_key": {
         "title": "API key",
-        "description": "Connect {provider}. Official mode sends the key in the provider's standard header. Custom base URL keeps that header and sends requests to an endpoint you choose.",
+        "description": "{provider}-compatible. Official endpoint, or a custom base URL for any compatible host. Paste the API key that host expects. Both choices use the same request headers.",
         "data": {
           "api_key": "API key",
           "connection_mode": "Request style",
@@ -56,13 +56,13 @@
         },
         "data_description": {
           "api_key": "Stored encrypted on this Home Assistant. Later screens show only a mask.",
-          "connection_mode": "Official uses the provider cloud API. Custom base URL is for a compatible proxy or gateway.",
-          "base_url": "Used only when the request style is custom base URL. Leave empty for the official API."
+          "connection_mode": "Official uses that protocol's public endpoint. Custom base URL sends the same request to any compatible host.",
+          "base_url": "Used only for a custom base URL. Leave empty to call the official endpoint."
         }
       },
       "provider_model": {
         "title": "Model",
-        "description": "{provider}. Stored API key: {masked_key}. Requests go to {base_url}.",
+        "description": "{provider}-compatible. Stored API key: {masked_key}. Requests go to {base_url}, the official endpoint or your custom base URL.",
         "data": {
           "connection_mode": "Request style",
           "base_url": "Custom base URL",
@@ -71,9 +71,9 @@
           "prompt": "Extra instructions"
         },
         "data_description": {
-          "connection_mode": "Official uses the provider cloud API. Custom base URL keeps the same API key header and changes the host.",
-          "base_url": "Used only when the request style is custom base URL.",
-          "model": "Model id from the provider. You can type one if the list is empty.",
+          "connection_mode": "Official uses that protocol's public endpoint. Custom base URL keeps the same API key header and sends it to any compatible host.",
+          "base_url": "Used only for a custom base URL.",
+          "model": "Model id expected by this endpoint. You can type one if the list is empty.",
           "llm_hass_api": "Optional. Exposes the selected Home Assistant tools to the model.",
           "prompt": "Added after the built-in Assist prompt."
         }
@@ -103,10 +103,10 @@
       "no_models": "Could not load models. You can still type a model id such as default.",
       "bridge_not_acknowledged": "Confirm that you understand Cursor Bridge is an unofficial service.",
       "invalid_api_key": "Enter an API key without spaces.",
-      "provider_auth": "The provider rejected this API key.",
-      "provider_connect": "Could not reach the API. Check the request style and try again.",
-      "provider_no_models": "Could not load models. You can still type a model id.",
-      "invalid_connection_mode": "Choose the official API or a custom base URL."
+      "provider_auth": "The endpoint rejected this API key.",
+      "provider_connect": "Could not reach the endpoint. Check the official endpoint or custom base URL and try again.",
+      "provider_no_models": "Could not load models from this endpoint. You can still type a model id.",
+      "invalid_connection_mode": "Choose the official endpoint or a custom base URL."
     },
     "abort": {
       "already_configured": "This Cursor account is already configured.",
@@ -134,7 +134,7 @@
         },
         "menu_option_descriptions": {
           "settings": "Choose the model, Cursor Bridge URL, Assist tools, and extra instructions.",
-          "api_settings": "Choose the official API or a custom base URL, then the model, Assist tools, and extra instructions.",
+          "api_settings": "OpenAI-compatible or Anthropic-compatible, matching this entry: official endpoint or a custom base URL, then the model, Assist tools, and extra instructions.",
           "refresh_models": "Request the model list from the configured endpoint.",
           "reauth": "Open the Cursor login page and mint a new API key for this account.",
           "switch_account": "Sign out and link a different Cursor account.",
@@ -195,7 +195,7 @@
       },
       "api_settings": {
         "title": "Model and base URL",
-        "description": "{account}. API key: {masked_key}. Requests go to {base_url}.",
+        "description": "{provider}-compatible. API key: {masked_key}. Requests go to {base_url}, the official endpoint or your custom base URL.",
         "data": {
           "connection_mode": "Request style",
           "base_url": "Custom base URL",
@@ -204,9 +204,9 @@
           "prompt": "Extra instructions"
         },
         "data_description": {
-          "connection_mode": "Official uses the provider cloud API. Custom base URL keeps the same API key header and changes the host.",
-          "base_url": "Used only when the request style is custom base URL. Leave empty for the official API.",
-          "model": "Model id from the provider. You can type one if the list is empty.",
+          "connection_mode": "Official uses that protocol's public endpoint. Custom base URL keeps the same API key header and sends it to any compatible host.",
+          "base_url": "Used only for a custom base URL. Leave empty to call the official endpoint.",
+          "model": "Model id expected by this endpoint. You can type one if the list is empty.",
           "llm_hass_api": "Optional. Exposes the selected Home Assistant tools to the model.",
           "prompt": "Added after the built-in Assist prompt. Leave empty to remove extra instructions."
         }
@@ -223,13 +223,13 @@
       },
       "remove_key": {
         "title": "Remove API key",
-        "description": "This removes the stored API key for {account} ({masked_key}) from Home Assistant. The key is not revoked at the provider. Revoke it there if it should stop working immediately."
+        "description": "This removes the stored API key for {account} ({masked_key}) from Home Assistant. The key is not revoked at the host that issued it. Revoke it there if it should stop working immediately."
       }
     },
     "progress": {
       "authorize": "Waiting for browser approval. Login URL: {login_url}",
       "refresh_models": "Loading models from Cursor Bridge.",
-      "refresh_api_models": "Loading models from the configured API."
+      "refresh_api_models": "Loading models from the official endpoint or custom base URL."
     },
     "error": {
       "cannot_connect": "Could not reach Cursor Bridge.",
@@ -242,10 +242,10 @@
       "no_models": "Could not load models. You can still type a model id such as default.",
       "bridge_not_acknowledged": "Confirm that you understand Cursor Bridge is an unofficial service.",
       "invalid_api_key": "Enter an API key without spaces.",
-      "provider_auth": "The provider rejected this API key.",
-      "provider_connect": "Could not reach the API. Check the request style and try again.",
-      "provider_no_models": "Could not load models. You can still type a model id.",
-      "invalid_connection_mode": "Choose the official API or a custom base URL."
+      "provider_auth": "The endpoint rejected this API key.",
+      "provider_connect": "Could not reach the endpoint. Check the official endpoint or custom base URL and try again.",
+      "provider_no_models": "Could not load models from this endpoint. You can still type a model id.",
+      "invalid_connection_mode": "Choose the official endpoint or a custom base URL."
     },
     "abort": {
       "already_configured": "This Cursor account is already configured on another entry.",
@@ -262,7 +262,7 @@
   "selector": {
     "connection_mode": {
       "options": {
-        "official": "Official API (key in header)",
+        "official": "Official endpoint (key in header)",
         "compatible": "Custom base URL"
       }
     }

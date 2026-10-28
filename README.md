@@ -5,11 +5,11 @@
 ![Smart LLM](images/icon.png)
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![Release](https://img.shields.io/github/v/release/YyyQq-C/hass-smart-llm?label=release)](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.0)
+[![Release](https://img.shields.io/github/v/release/YyyQq-C/hass-smart-llm?label=release)](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.1)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.1%2B-41BDF5)](https://www.home-assistant.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Pluggable conversation agent for Home Assistant Assist. The current release, [v1.1.0](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.0), has three paths. Each path is its own conversation entity under Settings → Voice assistants.
+Pluggable conversation agent for Home Assistant Assist. The current release, [v1.1.1](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.1), has three paths. Each path is its own conversation entity under Settings → Voice assistants.
 
 - **Cursor** uses browser login and [Cursor Bridge](https://cursorbridge.dev).
 - **OpenAI** in the menu is the OpenAI-compatible protocol: `Authorization: Bearer` and chat completions. Official mode calls OpenAI. A custom base URL sends that same request to any host that speaks the API, including Azure OpenAI, OpenRouter, and a local proxy.
@@ -17,7 +17,7 @@ Pluggable conversation agent for Home Assistant Assist. The current release, [v1
 
 The menu keeps the names OpenAI and Anthropic because those names are the protocols. Another vendor works on that menu choice when its API speaks the same style.
 
-The domain is `smart_llm`. The integration manifest version is `1.1.0`.
+The domain is `smart_llm`. The integration manifest version is `1.1.1`. v1.1.1 only clarifies the setup wording: OpenAI and Anthropic are compatible protocols, with the official endpoint or a custom base URL for another vendor.
 
 ## Features
 
@@ -53,7 +53,7 @@ That link only opens this custom repository. It does not mean Smart LLM is in th
 
 ### Update
 
-To install [v1.1.0](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.0) or a later release on an existing setup, update inside HACS. Leave the custom repository and the Smart LLM config entries in place.
+To install [v1.1.1](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.1) or a later release on an existing setup, update inside HACS. Leave the custom repository and the Smart LLM config entries in place.
 
 1. Open HACS → Integrations → **Smart LLM**.
 2. When HACS offers a newer version, choose **Update**. To fetch the current release again, open the menu and choose **Redownload**.
