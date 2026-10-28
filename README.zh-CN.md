@@ -16,8 +16,10 @@ Home Assistant Assist 的可插拔对话代理。当前版本接入 **Cursor**�
 
 - 在浏览器里登录 Cursor，握手方式与 Cursor TypeScript SDK 和 `agent login` 相同。
 - 签发用户 API 密钥，并加密保存在这套 Home Assistant 上。界面只显示掩码，例如 `crsr_••••••••wxyz`。
+- 界面里的账号地址会打码（`yongqc@gmail.com` 显示为 `y**@g**.com`）。Assist 代理名称是 **Cursor**，名称里不包含邮箱。
 - 通过 OpenAI 兼容的 Cursor Bridge 地址拉取模型列表、回答 Assist。
 - 注册对话实体，可选把 Home Assistant 工具交给模型。
+- 在集成选项里退出登录，或切换到另一个 Cursor 账号。
 
 ## 安装
 
@@ -71,10 +73,13 @@ config/custom_components/smart_llm/manifest.json
 | --- | --- |
 | 模型与 Bridge URL | 基础 URL、模型、Assist 工具和补充说明 |
 | 刷新模型列表 | 请求 `GET /v1/models` |
-| 重新授权 | 再走一次浏览器登录，并替换已保存的密钥 |
-| 退出登录 | 从 Home Assistant 删除密钥 |
+| 重新授权 | 再走一次浏览器登录，并为同一个账号替换已保存的密钥 |
+| 切换账号 | 移除已保存的密钥，再走浏览器登录，绑定另一个 Cursor 账号。新密钥保存后会刷新模型列表 |
+| 退出登录 | 从 Home Assistant 删除密钥和已保存的账号地址 |
 
-退出登录不会在 Cursor 控制台里撤销这把密钥。若要立刻失效，请到控制台撤销。重新授权之后，Assist 才能继续使用这个代理。
+选项界面里的账号显示为 `y**@g**.com` 这种掩码，不会出现完整邮箱。语音助手卡片和集成标题保持为 **Cursor**。
+
+退出登录不会在 Cursor 控制台里撤销这把密钥。若要立刻失效，请到控制台撤销。之后需要重新授权，Assist 才能继续使用这个代理。切换账号会先退出，再使用与首次安装相同的浏览器登录。重新授权仍然要求是同一个 Cursor 账号。
 
 ## 接到 Assist
 

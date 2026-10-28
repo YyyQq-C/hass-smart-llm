@@ -29,6 +29,7 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    AGENT_NAME,
     CONF_ACKNOWLEDGE_BRIDGE,
     CONF_API_KEY_ENCRYPTED,
     CONF_API_KEY_EXPIRES_AT,
@@ -43,7 +44,17 @@ from .const import (
     PROVIDER_CURSOR,
 )
 from .crypto import DecryptionError, mask_secret
-from .identity import account_unique_id, same_cursor_account
+from .identity import (
+    account_unique_id,
+    clear_account_switch,
+    credential_update_block,
+    display_account,
+    mark_account_switch,
+    options_with_refreshed_models,
+    public_title,
+    unique_id_for_login,
+    without_stored_credentials,
+)
 from .provider.cursor_auth import (
     LoginHandshake,
     LoginResult,
@@ -56,12 +67,6 @@ from .provider.registry import provider_menu_options
 from .secrets import async_decrypt, async_encrypt
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _entry_title(email: str | None) -> str:
-    if email:
-        return f"Cursor ({email})"
-    return "Cursor"
 
 
 def _ensure_default_model(models: list[str]) -> list[str]:
@@ -77,6 +82,17 @@ class _CursorBrowserLogin:
     _poll_task: asyncio.Task[None] | None = None
     _login_result: LoginResult | None = None
     _login_error: str | None = None
+    _link_step_id: str = "cursor_link"
+    _pinned_account: str | None = None
+
+    def _display_account(self) -> str:
+        """Account label for forms. Subclasses override this."""
+        if self._pinned_account:
+            return self._pinned_account
+        result = self._login_result
+        if result is not None:
+            return display_account(result.email)
+        return AGENT_NAME
 
     async def async_step_cursor_link(
         self, user_input: dict[str, Any] | None = None
@@ -92,7 +108,7 @@ class _CursorBrowserLogin:
             self._handshake = create_login_handshake()
         login_url = self._handshake.login_url
         return self.async_show_form(
-            step_id="cursor_link",
+            step_id=self._link_step_id,
             data_schema=vol.Schema(
                 {
                     vol.Optional(
@@ -101,7 +117,10 @@ class _CursorBrowserLogin:
                     ): TextSelector(TextSelectorConfig(type=TextSelectorType.URL)),
                 }
             ),
-            description_placeholders={"login_url": login_url},
+            description_placeholders={
+                "login_url": login_url,
+                "account": self._display_account(),
+            },
             errors={"base": self._login_error} if self._login_error else {},
         )
 
@@ -194,6 +213,17 @@ class SmartLLMConfigFlow(ConfigFlow, _CursorBrowserLogin, domain=DOMAIN):
         """Start a new browser login for an existing entry."""
         return await self.async_step_cursor_link()
 
+    def _display_account(self) -> str:
+        """Masked account, including during reauth before a new login exists."""
+        if self._pinned_account:
+            return self._pinned_account
+        if self.source == SOURCE_REAUTH:
+            return display_account(self._get_reauth_entry().data.get(CONF_EMAIL))
+        result = self._login_result
+        if result is not None:
+            return display_account(result.email)
+        return AGENT_NAME
+
     async def _async_login_succeeded(self) -> ConfigFlowResult:
         if self.source == SOURCE_REAUTH:
             return await _async_save_credentials(self, self._get_reauth_entry())
@@ -262,7 +292,7 @@ class SmartLLMConfigFlow(ConfigFlow, _CursorBrowserLogin, domain=DOMAIN):
                     suggested.get(CONF_BRIDGE_BASE_URL, suggested_base)
                 ),
                 "masked_key": mask_secret(result.api_key),
-                "account": result.email or "Cursor",
+                "account": display_account(result.email),
             },
         )
 
@@ -306,7 +336,7 @@ class SmartLLMConfigFlow(ConfigFlow, _CursorBrowserLogin, domain=DOMAIN):
             options[CONF_PROMPT] = prompt
         if llm_api:
             options[CONF_LLM_HASS_API] = llm_api
-        return self.async_create_entry(title=_entry_title(result.email), data=data, options=options)
+        return self.async_create_entry(title=AGENT_NAME, data=data, options=options)
 
     @staticmethod
     @callback
@@ -316,20 +346,36 @@ class SmartLLMConfigFlow(ConfigFlow, _CursorBrowserLogin, domain=DOMAIN):
 
 
 class SmartLLMOptionsFlow(OptionsFlow, _CursorBrowserLogin):
-    """Change the model, refresh Bridge models, re-authorize, or log out."""
+    """Change the model, refresh Bridge models, re-authorize, switch, or log out."""
 
     _refresh_task: asyncio.Task[None] | None = None
     _refreshed_models: list[str] | None = None
     _refresh_error: str | None = None
+    _switching_account: bool = False
+
+    def _display_account(self) -> str:
+        """Masked account pinned before credentials are cleared."""
+        if self._pinned_account:
+            return self._pinned_account
+        result = self._login_result
+        if result is not None and result.email:
+            return display_account(result.email)
+        return display_account(self.config_entry.data.get(CONF_EMAIL))
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Show what is stored, without revealing the API key."""
+        """Show what is stored, without revealing the API key or full email."""
         masked, account = await _identity(self.hass, self.config_entry)
         return self.async_show_menu(
             step_id="init",
-            menu_options=["settings", "refresh_models", "reauth", "logout"],
+            menu_options=[
+                "settings",
+                "refresh_models",
+                "reauth",
+                "switch_account",
+                "logout",
+            ],
             description_placeholders={"masked_key": masked, "account": account},
         )
 
@@ -441,8 +487,31 @@ class SmartLLMOptionsFlow(OptionsFlow, _CursorBrowserLogin):
     async def async_step_reauth(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Mint a new API key with the browser login."""
+        """Mint a new API key for the same Cursor account."""
+        self._switching_account = False
+        self._link_step_id = "cursor_link"
         return await self.async_step_cursor_link()
+
+    async def async_step_switch_account(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Sign out, then link a different Cursor account."""
+        if user_input is None:
+            masked, account = await _identity(self.hass, self.config_entry)
+            return self.async_show_form(
+                step_id="switch_account",
+                data_schema=vol.Schema({}),
+                description_placeholders={"masked_key": masked, "account": account},
+            )
+        await self._async_begin_account_switch()
+        return await self.async_step_switch_link()
+
+    async def async_step_switch_link(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Browser login used to link the replacement Cursor account."""
+        self._link_step_id = "switch_link"
+        return await self.async_step_cursor_link(user_input)
 
     async def async_step_logout(
         self, user_input: dict[str, Any] | None = None
@@ -455,44 +524,131 @@ class SmartLLMOptionsFlow(OptionsFlow, _CursorBrowserLogin):
                 data_schema=vol.Schema({}),
                 description_placeholders={"masked_key": masked, "account": account},
             )
-        data = dict(self.config_entry.data)
-        data.pop(CONF_API_KEY_ENCRYPTED, None)
-        data.pop(CONF_API_KEY_EXPIRES_AT, None)
-        self.hass.config_entries.async_update_entry(self.config_entry, data=data)
+        self._switching_account = False
+        clear_account_switch(self.hass.data, self.config_entry.entry_id)
+        _forget_credentials(self.hass, self.config_entry)
+        if self.config_entry.state is not ConfigEntryState.LOADED:
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
         return self.async_abort(reason="logged_out")
 
+    async def _async_begin_account_switch(self) -> None:
+        """Drop the stored key before the replacement login starts."""
+        self._pinned_account = display_account(self.config_entry.data.get(CONF_EMAIL))
+        self._switching_account = True
+        self._link_step_id = "switch_link"
+        self._handshake = None
+        self._poll_task = None
+        self._login_result = None
+        self._login_error = None
+        mark_account_switch(self.hass.data, self.config_entry.entry_id)
+        _forget_credentials(self.hass, self.config_entry)
+
     async def _async_login_succeeded(self) -> ConfigFlowResult:
-        return await _async_save_credentials(self, self.config_entry)
+        if not self._switching_account:
+            return await _async_save_credentials(self, self.config_entry)
+        listed: list[str] | None = None
+        if self._login_result is not None:
+            listed = await self._async_list_models_for_key(self._login_result.api_key)
+        options = options_with_refreshed_models(self.config_entry.options, listed)
+        return await _async_save_credentials(
+            self,
+            self.config_entry,
+            allow_different_account=True,
+            options=options,
+            abort_reason="switch_successful",
+        )
+
+    async def _async_list_models_for_key(self, api_key: str) -> list[str] | None:
+        """Load Bridge models with a key that is not logged."""
+        base_url = self.config_entry.options.get(
+            CONF_BRIDGE_BASE_URL, DEFAULT_BRIDGE_BASE_URL
+        )
+        try:
+            client = CursorBridgeClient(
+                async_get_clientsession(self.hass),
+                api_key=api_key,
+                base_url=base_url,
+            )
+            return _ensure_default_model(await client.async_list_models())
+        except (CursorAuthError, CursorAPIError, ValueError):
+            _LOGGER.warning("Could not refresh Cursor Bridge models after account switch")
+            return None
+        except Exception:
+            _LOGGER.exception("Refreshing Cursor Bridge models failed")
+            return None
+
+    async def async_remove(self) -> None:
+        """If switch-account is abandoned, leave the entry needing reauth."""
+        if self._switching_account:
+            self._switching_account = False
+            entry_id = self.config_entry.entry_id
+            clear_account_switch(self.hass.data, entry_id)
+            if not self.config_entry.data.get(CONF_API_KEY_ENCRYPTED):
+                self.hass.async_create_task(
+                    self.hass.config_entries.async_reload(entry_id)
+                )
+        await super().async_remove()
 
 
-async def _async_save_credentials(flow: Any, entry: ConfigEntry) -> ConfigFlowResult:
+def _forget_credentials(hass: Any, entry: ConfigEntry) -> None:
+    """Remove the stored Cursor credential and any email in the entry title."""
+    hass.config_entries.async_update_entry(
+        entry,
+        data=without_stored_credentials(entry.data),
+        title=public_title(entry.title),
+    )
+
+
+async def _async_save_credentials(
+    flow: Any,
+    entry: ConfigEntry,
+    *,
+    allow_different_account: bool = False,
+    options: dict[str, Any] | None = None,
+    abort_reason: str = "reauth_successful",
+) -> ConfigFlowResult:
     """Write a new encrypted API key onto an existing entry."""
     result: LoginResult | None = flow._login_result
     if result is None:
         return flow.async_abort(reason="unknown")
-    if not same_cursor_account(entry.unique_id, result.email):
-        return flow.async_abort(reason="wrong_account")
-    new_unique_id = (
-        account_unique_id(result.email, result.api_key)
-        if result.email
-        else entry.unique_id
+    block = credential_update_block(
+        entry.unique_id,
+        result.email,
+        allow_different_account=allow_different_account,
+    )
+    if block:
+        return flow.async_abort(reason=block)
+    new_unique_id = unique_id_for_login(
+        entry.unique_id,
+        result.email,
+        result.api_key,
+        allow_different_account=allow_different_account,
     )
     if new_unique_id:
         for other in flow.hass.config_entries.async_entries(DOMAIN):
             if other.entry_id != entry.entry_id and other.unique_id == new_unique_id:
                 return flow.async_abort(reason="already_configured")
-    data = dict(entry.data)
-    data.update(await _credential_data(flow.hass, result))
-    was_loaded = entry.state is ConfigEntryState.LOADED
-    flow.hass.config_entries.async_update_entry(
-        entry,
-        data=data,
-        unique_id=new_unique_id,
-        title=_entry_title(result.email or entry.data.get(CONF_EMAIL)),
+    data = without_stored_credentials(
+        entry.data,
+        keep_email=not result.email and not allow_different_account,
     )
-    if not was_loaded:
+    data.update(await _credential_data(flow.hass, result))
+    if allow_different_account:
+        clear_account_switch(flow.hass.data, entry.entry_id)
+        flow._switching_account = False
+    was_loaded = entry.state is ConfigEntryState.LOADED
+    update_kwargs: dict[str, Any] = {
+        "data": data,
+        "title": public_title(entry.title),
+    }
+    if new_unique_id is not None:
+        update_kwargs["unique_id"] = new_unique_id
+    if options is not None:
+        update_kwargs["options"] = options
+    flow.hass.config_entries.async_update_entry(entry, **update_kwargs)
+    if allow_different_account or not was_loaded:
         await flow.hass.config_entries.async_reload(entry.entry_id)
-    return flow.async_abort(reason="reauth_successful")
+    return flow.async_abort(reason=abort_reason)
 
 
 async def _credential_data(hass: Any, result: LoginResult) -> dict[str, Any]:
@@ -508,8 +664,7 @@ async def _credential_data(hass: Any, result: LoginResult) -> dict[str, Any]:
 
 async def _identity(hass: Any, entry: ConfigEntry) -> tuple[str, str]:
     encrypted = entry.data.get(CONF_API_KEY_ENCRYPTED)
-    email = entry.data.get(CONF_EMAIL)
-    account = email or "Cursor"
+    account = display_account(entry.data.get(CONF_EMAIL))
     if not encrypted:
         return "—", account
     try:

@@ -16,8 +16,10 @@ The domain is `smart_llm`. After setup, the agent is available under Settings �
 
 - Cursor sign-in in the browser, using the same PKCE handshake as the Cursor TypeScript SDK and `agent login`.
 - A minted user API key, stored encrypted on this Home Assistant install. Screens show a mask such as `crsr_••••••••wxyz`.
+- Account addresses are masked in the UI (`yongqc@gmail.com` is shown as `y**@g**.com`). The Assist agent is named **Cursor**, with no email in the name.
 - Model list and Assist replies through an OpenAI-compatible Cursor Bridge URL.
 - A conversation entity, with optional Home Assistant tools.
+- Log out, or switch to another Cursor account, from the integration options.
 
 ## Install
 
@@ -71,10 +73,13 @@ Open the integration options to change how Assist calls Cursor.
 | --- | --- |
 | Model and Bridge URL | Base URL, model, Assist tools, and extra instructions |
 | Refresh models | Request `GET /v1/models` |
-| Re-authorize | Run browser login again and replace the stored key |
-| Log out | Remove the key from Home Assistant |
+| Re-authorize | Run browser login again and replace the stored key for the same account |
+| Switch account | Remove the stored key, run browser login, and link a different Cursor account. The model list is refreshed after the new key is saved |
+| Log out | Remove the key and the stored account address from Home Assistant |
 
-Logging out does not revoke the key in the Cursor dashboard. Revoke it there if it should stop working immediately. Assist needs a new login before it can use this agent again.
+The options screens show the account as a mask such as `y**@g**.com`, never the full address. The voice assistant card and the integration title stay **Cursor**.
+
+Logging out does not revoke the key in the Cursor dashboard. Revoke it there if it should stop working immediately. The entry then needs authorization again before Assist can use this agent. Switching accounts signs out first, then uses the same browser login as the first setup. Re-authorize still expects the same Cursor account.
 
 ## Assist setup
 
