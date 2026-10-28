@@ -1,0 +1,147 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Provider",
+        "description": "Smart LLM connects Home Assistant Assist to a pluggable language model. This version supports Cursor.",
+        "menu_options": {
+          "cursor": "Cursor"
+        },
+        "menu_option_descriptions": {
+          "cursor": "Sign in with Cursor in your browser, then answer Assist through Cursor Bridge."
+        }
+      },
+      "cursor_link": {
+        "title": "Authorize Cursor",
+        "description": "Open this URL and approve access for Smart LLM. The login verifier stays on this Home Assistant instance and is not part of the URL.\n\n{login_url}\n\nAfter you approve, submit to wait for Cursor.",
+        "data": {
+          "login_url": "Login URL"
+        },
+        "data_description": {
+          "login_url": "Copy this if the link above is hard to select. Editing it has no effect."
+        }
+      },
+      "cursor_poll": {
+        "title": "Waiting for Cursor"
+      },
+      "cursor_model": {
+        "title": "Model",
+        "description": "Signed in as {account}. Stored API key: {masked_key}. Requests go to Cursor Bridge at {bridge_base_url}. Cursor Bridge is unofficial community software; the operator of that URL can see prompts you send.",
+        "data": {
+          "bridge_base_url": "Cursor Bridge base URL",
+          "model": "Model",
+          "llm_hass_api": "Control Home Assistant",
+          "prompt": "Extra instructions",
+          "acknowledge_bridge": "I understand Cursor Bridge is unofficial"
+        },
+        "data_description": {
+          "bridge_base_url": "OpenAI-compatible base URL. The default is https://cursorbridge.dev/v1.",
+          "model": "Model id from Cursor Bridge. Use default to let Cursor choose.",
+          "llm_hass_api": "Optional. Exposes the selected Home Assistant tools to the model.",
+          "prompt": "Added after the built-in Assist prompt.",
+          "acknowledge_bridge": "Required before the API key is stored."
+        }
+      }
+    },
+    "progress": {
+      "authorize": "Waiting for browser approval. Login URL: {login_url}"
+    },
+    "error": {
+      "cannot_connect": "Could not reach Cursor.",
+      "timeout": "Authorization timed out. Start again and approve the login in your browser.",
+      "invalid_auth": "Cursor rejected the login or the API key.",
+      "mint_failed": "Login succeeded, but creating an API key failed. Team settings may restrict user API keys.",
+      "unknown": "Something went wrong during Cursor login.",
+      "invalid_url": "Enter an http or https URL without embedded credentials.",
+      "invalid_model": "Enter a model id without spaces.",
+      "no_models": "Could not load models. You can still type a model id such as default.",
+      "bridge_not_acknowledged": "Confirm that you understand Cursor Bridge is an unofficial service."
+    },
+    "abort": {
+      "already_configured": "This Cursor account is already configured.",
+      "reauth_successful": "Re-authorization successful.",
+      "cancelled": "Authorization was cancelled.",
+      "wrong_account": "That Cursor account does not match this integration entry.",
+      "unknown": "Authorization could not be saved."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Smart LLM",
+        "description": "Account: {account}. API key: {masked_key}.",
+        "menu_options": {
+          "settings": "Model and Bridge URL",
+          "refresh_models": "Refresh models",
+          "reauth": "Re-authorize",
+          "logout": "Log out"
+        },
+        "menu_option_descriptions": {
+          "settings": "Choose the model, Cursor Bridge URL, Assist tools, and extra instructions.",
+          "refresh_models": "Call GET /v1/models on the configured Cursor Bridge URL.",
+          "reauth": "Open the Cursor login page and mint a new API key.",
+          "logout": "Remove the stored API key from Home Assistant."
+        }
+      },
+      "settings": {
+        "title": "Model and Bridge URL",
+        "description": "Account: {account}. API key: {masked_key}. Cursor Bridge ({bridge_base_url}) is unofficial community software. The operator of that URL can see prompts you send.",
+        "data": {
+          "bridge_base_url": "Cursor Bridge base URL",
+          "model": "Model",
+          "llm_hass_api": "Control Home Assistant",
+          "prompt": "Extra instructions"
+        },
+        "data_description": {
+          "bridge_base_url": "OpenAI-compatible base URL. The default is https://cursorbridge.dev/v1.",
+          "model": "Model id from Cursor Bridge. Use default to let Cursor choose.",
+          "llm_hass_api": "Optional. Exposes the selected Home Assistant tools to the model.",
+          "prompt": "Added after the built-in Assist prompt. Leave empty to remove extra instructions."
+        }
+      },
+      "refresh_models": {
+        "title": "Refresh models"
+      },
+      "cursor_link": {
+        "title": "Re-authorize Cursor",
+        "description": "Open this URL and approve access. The previous key is replaced only after a new key is minted.\n\n{login_url}",
+        "data": {
+          "login_url": "Login URL"
+        },
+        "data_description": {
+          "login_url": "Copy this if the link above is hard to select. Editing it has no effect."
+        }
+      },
+      "cursor_poll": {
+        "title": "Waiting for Cursor"
+      },
+      "logout": {
+        "title": "Log out",
+        "description": "This removes the stored API key for {account} ({masked_key}) from Home Assistant. The key remains valid in the Cursor dashboard until it expires or you revoke it there."
+      }
+    },
+    "progress": {
+      "authorize": "Waiting for browser approval. Login URL: {login_url}",
+      "refresh_models": "Loading models from Cursor Bridge."
+    },
+    "error": {
+      "cannot_connect": "Could not reach Cursor Bridge.",
+      "timeout": "Authorization timed out. Start again and approve the login in your browser.",
+      "invalid_auth": "Cursor rejected the API key. Re-authorize to mint a new one.",
+      "mint_failed": "Login succeeded, but creating an API key failed. Team settings may restrict user API keys.",
+      "unknown": "Something went wrong.",
+      "invalid_url": "Enter an http or https URL without embedded credentials.",
+      "invalid_model": "Enter a model id without spaces.",
+      "no_models": "Could not load models. You can still type a model id such as default.",
+      "bridge_not_acknowledged": "Confirm that you understand Cursor Bridge is an unofficial service."
+    },
+    "abort": {
+      "already_configured": "This Cursor account is already configured on another entry.",
+      "reauth_successful": "Re-authorization successful.",
+      "cancelled": "Authorization was cancelled.",
+      "wrong_account": "That Cursor account does not match this integration entry.",
+      "logged_out": "Logged out. Re-authorize before Assist can use Smart LLM again.",
+      "unknown": "Authorization could not be saved."
+    }
+  }
+}

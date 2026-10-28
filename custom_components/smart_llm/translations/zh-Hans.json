@@ -1,0 +1,147 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "提供方",
+        "description": "Smart LLM 把 Home Assistant Assist 接到可插拔的语言模型。当前版本支持 Cursor。",
+        "menu_options": {
+          "cursor": "Cursor"
+        },
+        "menu_option_descriptions": {
+          "cursor": "在浏览器中登录 Cursor，再通过 Cursor Bridge 回答 Assist。"
+        }
+      },
+      "cursor_link": {
+        "title": "授权 Cursor",
+        "description": "打开下面的网址并批准 Smart LLM。登录校验码只留在这台 Home Assistant 上，不会出现在网址里。\n\n{login_url}\n\n批准之后提交，开始等待 Cursor。",
+        "data": {
+          "login_url": "登录网址"
+        },
+        "data_description": {
+          "login_url": "如果上面的链接不好复制，用这个字段。修改它不会生效。"
+        }
+      },
+      "cursor_poll": {
+        "title": "正在等待 Cursor"
+      },
+      "cursor_model": {
+        "title": "模型",
+        "description": "已登录 {account}。已存储的 API 密钥：{masked_key}。请求会发到 Cursor Bridge：{bridge_base_url}。Cursor Bridge 是非官方社区服务，该网址的运营者可以看到你发送的提示词。",
+        "data": {
+          "bridge_base_url": "Cursor Bridge 基础 URL",
+          "model": "模型",
+          "llm_hass_api": "控制 Home Assistant",
+          "prompt": "补充说明",
+          "acknowledge_bridge": "我了解 Cursor Bridge 是非官方服务"
+        },
+        "data_description": {
+          "bridge_base_url": "OpenAI 兼容的基础 URL。默认是 https://cursorbridge.dev/v1。",
+          "model": "Cursor Bridge 上的模型 id。填 default 时由 Cursor 选择。",
+          "llm_hass_api": "可选。把所选的 Home Assistant 工具提供给模型。",
+          "prompt": "加在 Assist 内置提示词之后。",
+          "acknowledge_bridge": "确认后才会保存 API 密钥。"
+        }
+      }
+    },
+    "progress": {
+      "authorize": "正在等待浏览器批准。登录网址：{login_url}"
+    },
+    "error": {
+      "cannot_connect": "无法连接到 Cursor。",
+      "timeout": "授权超时。请重新开始，并在浏览器中批准登录。",
+      "invalid_auth": "Cursor 拒绝了这次登录或 API 密钥。",
+      "mint_failed": "登录成功，但创建 API 密钥失败。团队设置可能禁止用户 API 密钥。",
+      "unknown": "Cursor 登录时出现问题。",
+      "invalid_url": "请输入不含账号密码的 http 或 https 网址。",
+      "invalid_model": "请输入不含空格的模型 id。",
+      "no_models": "没能加载模型列表。你仍可以手动填写模型 id，例如 default。",
+      "bridge_not_acknowledged": "请确认你了解 Cursor Bridge 是非官方服务。"
+    },
+    "abort": {
+      "already_configured": "这个 Cursor 账号已经配置过。",
+      "reauth_successful": "重新授权成功。",
+      "cancelled": "授权已取消。",
+      "wrong_account": "这个 Cursor 账号与当前集成条目不一致。",
+      "unknown": "无法保存授权。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Smart LLM",
+        "description": "账号：{account}。API 密钥：{masked_key}。",
+        "menu_options": {
+          "settings": "模型与 Bridge URL",
+          "refresh_models": "刷新模型列表",
+          "reauth": "重新授权",
+          "logout": "退出登录"
+        },
+        "menu_option_descriptions": {
+          "settings": "选择模型、Cursor Bridge URL、Assist 工具和补充说明。",
+          "refresh_models": "向当前 Cursor Bridge URL 请求 GET /v1/models。",
+          "reauth": "打开 Cursor 登录页并签发一把新的 API 密钥。",
+          "logout": "从 Home Assistant 中移除已保存的 API 密钥。"
+        }
+      },
+      "settings": {
+        "title": "模型与 Bridge URL",
+        "description": "账号：{account}。API 密钥：{masked_key}。Cursor Bridge（{bridge_base_url}）是非官方社区服务，该网址的运营者可以看到你发送的提示词。",
+        "data": {
+          "bridge_base_url": "Cursor Bridge 基础 URL",
+          "model": "模型",
+          "llm_hass_api": "控制 Home Assistant",
+          "prompt": "补充说明"
+        },
+        "data_description": {
+          "bridge_base_url": "OpenAI 兼容的基础 URL。默认是 https://cursorbridge.dev/v1。",
+          "model": "Cursor Bridge 上的模型 id。填 default 时由 Cursor 选择。",
+          "llm_hass_api": "可选。把所选的 Home Assistant 工具提供给模型。",
+          "prompt": "加在 Assist 内置提示词之后。留空可清除补充说明。"
+        }
+      },
+      "refresh_models": {
+        "title": "刷新模型列表"
+      },
+      "cursor_link": {
+        "title": "重新授权 Cursor",
+        "description": "打开下面的网址并批准。只有新密钥签发成功后，才会替换原来的密钥。\n\n{login_url}",
+        "data": {
+          "login_url": "登录网址"
+        },
+        "data_description": {
+          "login_url": "如果上面的链接不好复制，用这个字段。修改它不会生效。"
+        }
+      },
+      "cursor_poll": {
+        "title": "正在等待 Cursor"
+      },
+      "logout": {
+        "title": "退出登录",
+        "description": "这会从 Home Assistant 中移除 {account} 的 API 密钥（{masked_key}）。在 Cursor 控制台里，这把密钥在过期或被你撤销之前仍然有效。"
+      }
+    },
+    "progress": {
+      "authorize": "正在等待浏览器批准。登录网址：{login_url}",
+      "refresh_models": "正在从 Cursor Bridge 加载模型。"
+    },
+    "error": {
+      "cannot_connect": "无法连接到 Cursor Bridge。",
+      "timeout": "授权超时。请重新开始，并在浏览器中批准登录。",
+      "invalid_auth": "Cursor 拒绝了这把 API 密钥。请重新授权以签发新密钥。",
+      "mint_failed": "登录成功，但创建 API 密钥失败。团队设置可能禁止用户 API 密钥。",
+      "unknown": "出现问题。",
+      "invalid_url": "请输入不含账号密码的 http 或 https 网址。",
+      "invalid_model": "请输入不含空格的模型 id。",
+      "no_models": "没能加载模型列表。你仍可以手动填写模型 id，例如 default。",
+      "bridge_not_acknowledged": "请确认你了解 Cursor Bridge 是非官方服务。"
+    },
+    "abort": {
+      "already_configured": "这个 Cursor 账号已经配置在另一个条目上。",
+      "reauth_successful": "重新授权成功。",
+      "cancelled": "授权已取消。",
+      "wrong_account": "这个 Cursor 账号与当前集成条目不一致。",
+      "logged_out": "已退出登录。重新授权之后，Assist 才能继续使用 Smart LLM。",
+      "unknown": "无法保存授权。"
+    }
+  }
+}
