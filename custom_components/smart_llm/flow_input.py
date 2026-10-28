@@ -33,10 +33,33 @@ class ParsedConnection:
     base_url: str
 
 
-def parse_api_key(user_input: Mapping[str, Any]) -> tuple[str | None, dict[str, str]]:
-    """Return the pasted key, or a field error. The key is not logged."""
+def api_key_is_optional(provider: str, connection_mode: str) -> bool:
+    """Whether this provider and request style may be saved with no API key.
+
+    Only an OpenAI-compatible custom base URL may omit the key. Official
+    OpenAI still requires one, and Anthropic always does. Local servers such
+    as Ollama often have no key; the client then omits Authorization.
+    """
+    return provider == PROVIDER_OPENAI and connection_mode == CONNECTION_COMPATIBLE
+
+
+def parse_api_key(
+    user_input: Mapping[str, Any],
+    *,
+    allow_empty: bool = False,
+) -> tuple[str | None, dict[str, str]]:
+    """Return the pasted key, or a field error. The key is not logged.
+
+    ``allow_empty`` is for an OpenAI-compatible custom base URL. A blank
+    value is then ``""``. A key that contains spaces is still rejected.
+    Official mode keeps the default and rejects a blank key.
+    """
     key = str(user_input.get(CONF_API_KEY) or "").strip()
-    if not key or any(char.isspace() for char in key):
+    if not key:
+        if allow_empty:
+            return "", {}
+        return None, {CONF_API_KEY: "invalid_api_key"}
+    if any(char.isspace() for char in key):
         return None, {CONF_API_KEY: "invalid_api_key"}
     return key, {}
 

@@ -1,7 +1,8 @@
 """Registry of chat providers.
 
-Cursor signs in through the browser. OpenAI and Anthropic take an API key and
-call either the official host or a custom base URL with the same header.
+Cursor signs in through the browser. OpenAI and Anthropic call either the
+official host or a custom base URL. Official OpenAI and Anthropic require an
+API key. An OpenAI-compatible custom base URL may omit it.
 """
 
 from __future__ import annotations

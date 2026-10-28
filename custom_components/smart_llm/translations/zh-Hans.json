@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "提供方",
-        "description": "Smart LLM 把 Home Assistant Assist 接到可插拔的语言模型。Cursor 使用浏览器登录。OpenAI 菜单是 OpenAI 兼容，Anthropic 菜单是 Anthropic 兼容：官方端点，或自定义基础 URL，指向任意兼容主机（例如 Azure OpenAI、OpenRouter、本地代理或 Anthropic 兼容网关）。",
+        "description": "Smart LLM 把 Home Assistant Assist 接到可插拔的语言模型。Cursor 使用浏览器登录。OpenAI 菜单是 OpenAI 兼容，Anthropic 菜单是 Anthropic 兼容：官方端点，或自定义基础 URL，指向任意兼容主机（例如 Azure OpenAI、OpenRouter、Ollama、vLLM、LM Studio、LocalAI，或 Anthropic 兼容网关）。",
         "menu_options": {
           "cursor": "Cursor",
           "openai": "OpenAI",
@@ -11,7 +11,7 @@
         },
         "menu_option_descriptions": {
           "cursor": "在浏览器中登录 Cursor，再通过 Cursor Bridge 回答 Assist。",
-          "openai": "OpenAI 兼容。官方端点，或自定义基础 URL，指向任意兼容主机，例如 Azure OpenAI、OpenRouter 或本地代理。",
+          "openai": "OpenAI 兼容。官方端点，或自定义基础 URL，指向任意兼容主机，例如 Azure OpenAI、OpenRouter、Ollama、vLLM、LM Studio 或 LocalAI。",
           "anthropic": "Anthropic 兼容。官方端点，或自定义基础 URL，指向任意 Anthropic 兼容网关。"
         }
       },
@@ -48,16 +48,16 @@
       },
       "api_key": {
         "title": "API 密钥",
-        "description": "{provider} 兼容。官方端点，或自定义基础 URL，指向任意兼容主机。请粘贴该主机要求的 API 密钥。两种方式使用同一套请求头。",
+        "description": "{provider} 兼容。官方端点，或自定义基础 URL，指向任意兼容主机，包括 Ollama、vLLM、LM Studio、LocalAI 这类本地服务。请粘贴该主机要求的 API 密钥。只有 OpenAI 兼容的自定义基础 URL 可以不填密钥。两种方式使用同一套请求风格。",
         "data": {
           "api_key": "API 密钥",
           "connection_mode": "请求方式",
           "base_url": "自定义基础 URL"
         },
         "data_description": {
-          "api_key": "加密保存在这套 Home Assistant 上。之后的界面只显示掩码。",
-          "connection_mode": "官方模式使用该协议的公开端点。自定义基础 URL 把同一套请求发到任意兼容主机。",
-          "base_url": "仅在使用自定义基础 URL 时填写。调用官方端点时请留空。"
+          "api_key": "官方端点和 Anthropic 兼容主机必须填写。OpenAI 兼容的自定义基础 URL 可以留空：Ollama、vLLM、LM Studio 和 LocalAI 通常不需要密钥。填写后会加密保存。之后的界面只显示掩码。",
+          "connection_mode": "官方模式使用该协议的公开端点，并且必须有 API 密钥。自定义基础 URL 把同一套请求发到任意兼容主机，包括本地服务。",
+          "base_url": "仅在使用自定义基础 URL 时填写。示例：Ollama 用 host:11434/v1，vLLM 用 host:8000/v1。调用官方端点时请留空。"
         }
       },
       "provider_model": {
@@ -71,8 +71,8 @@
           "prompt": "补充说明"
         },
         "data_description": {
-          "connection_mode": "官方模式使用该协议的公开端点。自定义基础 URL 保持相同的密钥请求头，发到任意兼容主机。",
-          "base_url": "仅在使用自定义基础 URL 时填写。",
+          "connection_mode": "官方模式使用该协议的公开端点，并且必须有 API 密钥。自定义基础 URL 把同一套请求发到任意兼容主机，包括 Ollama 或 vLLM。OpenAI 密钥留空时不会发送 Authorization 请求头。",
+          "base_url": "仅在使用自定义基础 URL 时填写。示例：Ollama 用 host:11434/v1，vLLM 用 host:8000/v1。",
           "model": "该端点要求的模型 id。列表为空时仍可以手动填写。",
           "llm_hass_api": "可选。把所选的 Home Assistant 工具提供给模型。",
           "prompt": "加在 Assist 内置提示词之后。"
@@ -102,7 +102,8 @@
       "invalid_model": "请输入不含空格的模型 id。",
       "no_models": "没能加载模型列表。你仍可以手动填写模型 id，例如 default。",
       "bridge_not_acknowledged": "请确认你了解 Cursor Bridge 是非官方服务。",
-      "invalid_api_key": "请输入不含空格的 API 密钥。",
+      "invalid_api_key": "请输入不含空格的 API 密钥。官方端点必须填写。本地 OpenAI 兼容服务使用自定义基础 URL 时可以留空。",
+      "api_key_required": "官方端点需要 API 密钥。请用「更新 API 密钥」添加，或继续使用自定义基础 URL。",
       "provider_auth": "该端点拒绝了这把 API 密钥。",
       "provider_connect": "无法连接到该端点。请检查官方端点或自定义基础 URL 后重试。",
       "provider_no_models": "没能从该端点加载模型列表。你仍可以手动填写模型 id。",
@@ -134,7 +135,7 @@
         },
         "menu_option_descriptions": {
           "settings": "选择模型、Cursor Bridge URL、Assist 工具和补充说明。",
-          "api_settings": "按本条目的协议（OpenAI 兼容或 Anthropic 兼容）设置：官方端点或自定义基础 URL，然后选择模型、Assist 工具和补充说明。",
+          "api_settings": "按本条目的协议（OpenAI 兼容或 Anthropic 兼容）设置：官方端点或自定义基础 URL（Ollama、vLLM、LM Studio、LocalAI 或其他兼容主机），然后选择模型、Assist 工具和补充说明。",
           "refresh_models": "向当前配置的地址请求模型列表。",
           "reauth": "打开 Cursor 登录页，并为当前账号签发一把新的 API 密钥。",
           "switch_account": "退出当前账号，并登录另一个 Cursor 账号。",
@@ -204,8 +205,8 @@
           "prompt": "补充说明"
         },
         "data_description": {
-          "connection_mode": "官方模式使用该协议的公开端点。自定义基础 URL 保持相同的密钥请求头，发到任意兼容主机。",
-          "base_url": "仅在使用自定义基础 URL 时填写。调用官方端点时请留空。",
+          "connection_mode": "官方模式使用该协议的公开端点，并且必须有 API 密钥。自定义基础 URL 把同一套请求发到任意兼容主机，包括 Ollama 或 vLLM。OpenAI 密钥留空时不会发送 Authorization 请求头。",
+          "base_url": "仅在使用自定义基础 URL 时填写。示例：Ollama 用 host:11434/v1，vLLM 用 host:8000/v1。调用官方端点时请留空。",
           "model": "该端点要求的模型 id。列表为空时仍可以手动填写。",
           "llm_hass_api": "可选。把所选的 Home Assistant 工具提供给模型。",
           "prompt": "加在 Assist 内置提示词之后。留空可清除补充说明。"
@@ -241,7 +242,8 @@
       "invalid_model": "请输入不含空格的模型 id。",
       "no_models": "没能加载模型列表。你仍可以手动填写模型 id，例如 default。",
       "bridge_not_acknowledged": "请确认你了解 Cursor Bridge 是非官方服务。",
-      "invalid_api_key": "请输入不含空格的 API 密钥。",
+      "invalid_api_key": "请输入不含空格的 API 密钥。官方端点必须填写。本地 OpenAI 兼容服务使用自定义基础 URL 时可以留空。",
+      "api_key_required": "官方端点需要 API 密钥。请用「更新 API 密钥」添加，或继续使用自定义基础 URL。",
       "provider_auth": "该端点拒绝了这把 API 密钥。",
       "provider_connect": "无法连接到该端点。请检查官方端点或自定义基础 URL 后重试。",
       "provider_no_models": "没能从该端点加载模型列表。你仍可以手动填写模型 id。",
@@ -264,6 +266,19 @@
       "options": {
         "official": "官方端点（密钥放在请求头）",
         "compatible": "自定义基础 URL"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "included_usage_remaining": {
+        "name": "套餐剩余额度"
+      },
+      "included_usage_used": {
+        "name": "套餐已用比例"
+      },
+      "allowance_resets": {
+        "name": "额度重置时间"
       }
     }
   }

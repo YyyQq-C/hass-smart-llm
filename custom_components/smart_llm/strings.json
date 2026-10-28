@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Provider",
-        "description": "Smart LLM connects Home Assistant Assist to a pluggable language model. Cursor uses browser login. The OpenAI menu is OpenAI-compatible and the Anthropic menu is Anthropic-compatible: the official endpoint, or a custom base URL for any compatible host (Azure OpenAI, OpenRouter, a local proxy, or an Anthropic-compatible gateway).",
+        "description": "Smart LLM connects Home Assistant Assist to a pluggable language model. Cursor uses browser login. The OpenAI menu is OpenAI-compatible and the Anthropic menu is Anthropic-compatible: the official endpoint, or a custom base URL for any compatible host (Azure OpenAI, OpenRouter, Ollama, vLLM, LM Studio, LocalAI, or an Anthropic-compatible gateway).",
         "menu_options": {
           "cursor": "Cursor",
           "openai": "OpenAI",
@@ -11,7 +11,7 @@
         },
         "menu_option_descriptions": {
           "cursor": "Sign in with Cursor in your browser, then answer Assist through Cursor Bridge.",
-          "openai": "OpenAI-compatible. Official endpoint, or a custom base URL for any compatible host such as Azure OpenAI, OpenRouter, or a local proxy.",
+          "openai": "OpenAI-compatible. Official endpoint, or a custom base URL for any compatible host such as Azure OpenAI, OpenRouter, Ollama, vLLM, LM Studio, or LocalAI.",
           "anthropic": "Anthropic-compatible. Official endpoint, or a custom base URL for any Anthropic-compatible gateway."
         }
       },
@@ -48,16 +48,16 @@
       },
       "api_key": {
         "title": "API key",
-        "description": "{provider}-compatible. Official endpoint, or a custom base URL for any compatible host. Paste the API key that host expects. Both choices use the same request headers.",
+        "description": "{provider}-compatible. Official endpoint, or a custom base URL for any compatible host, including a local server such as Ollama, vLLM, LM Studio, or LocalAI. Paste the API key that host expects. Leave the key empty only for an OpenAI-compatible custom base URL that does not require one. Both choices use the same request style.",
         "data": {
           "api_key": "API key",
           "connection_mode": "Request style",
           "base_url": "Custom base URL"
         },
         "data_description": {
-          "api_key": "Stored encrypted on this Home Assistant. Later screens show only a mask.",
-          "connection_mode": "Official uses that protocol's public endpoint. Custom base URL sends the same request to any compatible host.",
-          "base_url": "Used only for a custom base URL. Leave empty to call the official endpoint."
+          "api_key": "Required for the official endpoint and for Anthropic-compatible hosts. Optional for an OpenAI-compatible custom base URL: Ollama, vLLM, LM Studio, and LocalAI often need no key. Stored encrypted when present. Later screens show only a mask.",
+          "connection_mode": "Official uses that protocol's public endpoint and requires an API key. Custom base URL sends the same request to any compatible host, including a local server.",
+          "base_url": "Used only for a custom base URL. Examples: host:11434/v1 for Ollama, host:8000/v1 for vLLM. Leave empty to call the official endpoint."
         }
       },
       "provider_model": {
@@ -71,8 +71,8 @@
           "prompt": "Extra instructions"
         },
         "data_description": {
-          "connection_mode": "Official uses that protocol's public endpoint. Custom base URL keeps the same API key header and sends it to any compatible host.",
-          "base_url": "Used only for a custom base URL.",
+          "connection_mode": "Official uses that protocol's public endpoint and requires an API key. Custom base URL sends the same request to any compatible host, including Ollama or vLLM. An empty OpenAI key omits the Authorization header.",
+          "base_url": "Used only for a custom base URL. Examples: host:11434/v1 for Ollama, host:8000/v1 for vLLM.",
           "model": "Model id expected by this endpoint. You can type one if the list is empty.",
           "llm_hass_api": "Optional. Exposes the selected Home Assistant tools to the model.",
           "prompt": "Added after the built-in Assist prompt."
@@ -102,7 +102,8 @@
       "invalid_model": "Enter a model id without spaces.",
       "no_models": "Could not load models. You can still type a model id such as default.",
       "bridge_not_acknowledged": "Confirm that you understand Cursor Bridge is an unofficial service.",
-      "invalid_api_key": "Enter an API key without spaces.",
+      "invalid_api_key": "Enter an API key without spaces. The official endpoint requires one. A custom base URL for a local OpenAI-compatible server can leave it empty.",
+      "api_key_required": "The official endpoint needs an API key. Add one with Update API key, or keep the custom base URL.",
       "provider_auth": "The endpoint rejected this API key.",
       "provider_connect": "Could not reach the endpoint. Check the official endpoint or custom base URL and try again.",
       "provider_no_models": "Could not load models from this endpoint. You can still type a model id.",
@@ -134,7 +135,7 @@
         },
         "menu_option_descriptions": {
           "settings": "Choose the model, Cursor Bridge URL, Assist tools, and extra instructions.",
-          "api_settings": "OpenAI-compatible or Anthropic-compatible, matching this entry: official endpoint or a custom base URL, then the model, Assist tools, and extra instructions.",
+          "api_settings": "OpenAI-compatible or Anthropic-compatible, matching this entry: official endpoint or a custom base URL (Ollama, vLLM, LM Studio, LocalAI, or another compatible host), then the model, Assist tools, and extra instructions.",
           "refresh_models": "Request the model list from the configured endpoint.",
           "reauth": "Open the Cursor login page and mint a new API key for this account.",
           "switch_account": "Sign out and link a different Cursor account.",
@@ -204,8 +205,8 @@
           "prompt": "Extra instructions"
         },
         "data_description": {
-          "connection_mode": "Official uses that protocol's public endpoint. Custom base URL keeps the same API key header and sends it to any compatible host.",
-          "base_url": "Used only for a custom base URL. Leave empty to call the official endpoint.",
+          "connection_mode": "Official uses that protocol's public endpoint and requires an API key. Custom base URL sends the same request to any compatible host, including Ollama or vLLM. An empty OpenAI key omits the Authorization header.",
+          "base_url": "Used only for a custom base URL. Examples: host:11434/v1 for Ollama, host:8000/v1 for vLLM. Leave empty to call the official endpoint.",
           "model": "Model id expected by this endpoint. You can type one if the list is empty.",
           "llm_hass_api": "Optional. Exposes the selected Home Assistant tools to the model.",
           "prompt": "Added after the built-in Assist prompt. Leave empty to remove extra instructions."
@@ -241,7 +242,8 @@
       "invalid_model": "Enter a model id without spaces.",
       "no_models": "Could not load models. You can still type a model id such as default.",
       "bridge_not_acknowledged": "Confirm that you understand Cursor Bridge is an unofficial service.",
-      "invalid_api_key": "Enter an API key without spaces.",
+      "invalid_api_key": "Enter an API key without spaces. The official endpoint requires one. A custom base URL for a local OpenAI-compatible server can leave it empty.",
+      "api_key_required": "The official endpoint needs an API key. Add one with Update API key, or keep the custom base URL.",
       "provider_auth": "The endpoint rejected this API key.",
       "provider_connect": "Could not reach the endpoint. Check the official endpoint or custom base URL and try again.",
       "provider_no_models": "Could not load models from this endpoint. You can still type a model id.",
@@ -264,6 +266,19 @@
       "options": {
         "official": "Official endpoint (key in header)",
         "compatible": "Custom base URL"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "included_usage_remaining": {
+        "name": "Included usage remaining"
+      },
+      "included_usage_used": {
+        "name": "Included usage used"
+      },
+      "allowance_resets": {
+        "name": "Allowance resets"
       }
     }
   }

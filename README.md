@@ -5,24 +5,25 @@
 ![Smart LLM](images/icon.png)
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![Release](https://img.shields.io/github/v/release/YyyQq-C/hass-smart-llm?label=release)](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.1)
+[![Release](https://img.shields.io/github/v/release/YyyQq-C/hass-smart-llm?label=release)](https://github.com/YyyQq-C/hass-smart-llm/releases)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.1%2B-41BDF5)](https://www.home-assistant.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Pluggable conversation agent for Home Assistant Assist. The current release, [v1.1.1](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.1), has three paths. Each path is its own conversation entity under Settings → Voice assistants.
+Pluggable conversation agent for Home Assistant Assist. Version 1.2.0 has three paths. Each path is its own conversation entity under Settings → Voice assistants.
 
-- **Cursor** uses browser login and [Cursor Bridge](https://cursorbridge.dev).
-- **OpenAI** in the menu is the OpenAI-compatible protocol: `Authorization: Bearer` and chat completions. Official mode calls OpenAI. A custom base URL sends that same request to any host that speaks the API, including Azure OpenAI, OpenRouter, and a local proxy.
-- **Anthropic** in the menu is the Anthropic-compatible protocol: `x-api-key`, `anthropic-version`, and the Messages API. Official mode calls Anthropic. A custom base URL sends that same request to a compatible gateway.
+- **Cursor** uses browser login and [Cursor Bridge](https://cursorbridge.dev). A Cursor entry also adds allowance sensors when Cursor returns the current billing period.
+- **OpenAI** in the menu is the OpenAI-compatible protocol: chat completions, and `Authorization: Bearer` when a key is set. Official mode calls OpenAI and requires a key. A custom base URL sends that same request to any host that speaks the API, including Azure OpenAI, OpenRouter, Ollama, vLLM, LM Studio, and LocalAI. The key is optional on that custom URL. An empty key omits `Authorization`.
+- **Anthropic** in the menu is the Anthropic-compatible protocol: `x-api-key`, `anthropic-version`, and the Messages API. Official mode calls Anthropic. A custom base URL sends that same request to a compatible gateway. Anthropic still requires a key.
 
-The menu keeps the names OpenAI and Anthropic because those names are the protocols. Another vendor works on that menu choice when its API speaks the same style.
+The menu keeps the names OpenAI and Anthropic because those names are the protocols. Another vendor works on that menu choice when its API speaks the same style. There is no separate Ollama protocol.
 
-The domain is `smart_llm`. The integration manifest version is `1.1.1`. v1.1.1 only clarifies the setup wording: OpenAI and Anthropic are compatible protocols, with the official endpoint or a custom base URL for another vendor.
+The domain is `smart_llm`. The integration manifest version is `1.2.0`. v1.2.0 lets an OpenAI-compatible custom base URL omit the API key, and it reads Cursor's current billing period into sensors. It does not add a new chat protocol.
 
 ## Features
 
 - **Cursor.** Browser sign-in uses the same PKCE handshake as the Cursor TypeScript SDK and `agent login`. Home Assistant stores a minted user API key, encrypted on this install. Account screens show a mask such as `y**@g**.com`. Log out or switch account from the integration options. The entry title and the Assist entity stay **Cursor**.
-- **OpenAI-compatible (menu: OpenAI).** Paste an API key. Official API sends `Authorization: Bearer` to `https://api.openai.com/v1`. Custom base URL keeps that header and the chat-completions request, and sends them to a host you choose: Azure OpenAI, OpenRouter, a local proxy, or any other OpenAI-compatible service.
+- **OpenAI-compatible (menu: OpenAI).** Paste an API key, or leave it empty for a local server that does not check one. Official API sends `Authorization: Bearer` to `https://api.openai.com/v1` and still requires a key. Custom base URL sends the chat-completions request to a host you choose: Azure OpenAI, OpenRouter, Ollama, vLLM, LM Studio, LocalAI, or any other OpenAI-compatible service. A key, when present, is sent as `Authorization: Bearer`. An empty key omits that header.
+- **Cursor allowance.** For a Cursor entry, sensors show included usage still left, the percent Cursor reports, and when the billing period ends. See [Cursor allowance](#cursor-allowance).
 - **Anthropic-compatible (menu: Anthropic).** Paste an API key. Official API sends `x-api-key` and `anthropic-version: 2023-06-01` to `https://api.anthropic.com` (`POST /v1/messages`). Custom base URL keeps those headers and sends them to an Anthropic-compatible gateway.
 - **Encrypted keys.** Cursor keys and API keys for both protocols are Fernet-encrypted with a key derived from this install (`.storage/core.uuid`). Screens and diagnostics show a mask. Keys are not written to logs.
 - One conversation entity per config entry, with optional Home Assistant tools. The Assist name follows the menu label (**Cursor**, **OpenAI**, or **Anthropic**), including when the host behind a custom URL is another vendor.
@@ -53,7 +54,7 @@ That link only opens this custom repository. It does not mean Smart LLM is in th
 
 ### Update
 
-To install [v1.1.1](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.1) or a later release on an existing setup, update inside HACS. Leave the custom repository and the Smart LLM config entries in place.
+To install a published release on an existing setup, update inside HACS. Leave the custom repository and the Smart LLM config entries in place. The manifest version in this tree is `1.2.0`. A GitHub release is published separately.
 
 1. Open HACS → Integrations → **Smart LLM**.
 2. When HACS offers a newer version, choose **Update**. To fetch the current release again, open the menu and choose **Redownload**.
@@ -117,10 +118,33 @@ v1.1.0 sends API keys with one of two compatible styles. Many vendors speak one 
 
 | Protocol (menu label) | Official API | Custom base URL |
 | --- | --- | --- |
-| OpenAI-compatible (**OpenAI**) | `Authorization: Bearer` against `https://api.openai.com/v1` (`GET /models`, `POST /chat/completions` on that base) | The same Bearer header and chat-completions request, sent to your host: Azure OpenAI, OpenRouter, a local proxy, or any other OpenAI-compatible service |
+| OpenAI-compatible (**OpenAI**) | `Authorization: Bearer` against `https://api.openai.com/v1` (`GET /models`, `POST /chat/completions` on that base). A key is required | The same chat-completions request, sent to your host: Azure OpenAI, OpenRouter, Ollama, vLLM, LM Studio, LocalAI, or any other OpenAI-compatible service. The key is optional. When it is empty, `Authorization` is omitted |
 | Anthropic-compatible (**Anthropic**) | `x-api-key` and `anthropic-version: 2023-06-01` against `https://api.anthropic.com` (`GET /v1/models`, `POST /v1/messages`) | The same `x-api-key` and `anthropic-version` headers and Messages request, sent to an Anthropic-compatible gateway |
 
-A custom URL must be `http` or `https` and must not include a username or password. An OpenAI-compatible paste is normalized so the base ends at `/v1` (`https://openrouter.ai/api/v1/chat/completions` becomes `https://openrouter.ai/api/v1`). An Anthropic-compatible paste is the host; a trailing `/v1` or `/v1/messages` is accepted and requests are still `POST /v1/messages`.
+A custom URL must be `http` or `https` and must not include a username or password. An OpenAI-compatible paste is normalized so the base ends at `/v1` (`https://openrouter.ai/api/v1/chat/completions` becomes `https://openrouter.ai/api/v1`). A local `http://…/v1` base keeps `http`. An Anthropic-compatible paste is the host; a trailing `/v1` or `/v1/messages` is accepted and requests are still `POST /v1/messages`.
+
+### Local servers (Ollama, vLLM, and others)
+
+Ollama, vLLM, LM Studio, and LocalAI speak the OpenAI chat API. Use the **OpenAI** menu. Do not look for a separate Ollama integration inside Smart LLM.
+
+1. Add **Smart LLM** and choose **OpenAI**.
+2. Leave the API key empty when the server does not require one. Ollama's default OpenAI endpoint does not. If the server expects a dummy key, paste it; Smart LLM then sends `Authorization: Bearer`.
+3. Choose **Custom base URL**.
+4. Enter the server's `/v1` base:
+
+   | Server | Usual base |
+   | --- | --- |
+   | Ollama | `http://HOST:11434/v1` |
+   | vLLM OpenAI server | `http://HOST:8000/v1` |
+   | LM Studio | `http://HOST:1234/v1` |
+   | LocalAI | `http://HOST:8080/v1` |
+
+   Ports are the usual defaults. Use the port that server is actually listening on.
+5. Pick a model from the list, or type the name the server expects (`llama3.2`, the vLLM model id, and so on).
+
+Home Assistant in Docker does not see a server on the host through `localhost`. Inside the container, `localhost` is the container. Use the host's LAN address, such as `http://192.168.1.20:11434/v1`, or `http://host.docker.internal:11434/v1` when that name resolves to the host (Docker Desktop does this). On Linux Docker, `host.docker.internal` exists only if the container is started with that host mapping.
+
+The official OpenAI endpoint still rejects an empty key. An empty key is accepted only for an OpenAI-compatible custom base URL.
 
 ### Options
 
@@ -161,9 +185,30 @@ https://cursorbridge.dev/v1
 
 Browser login still uses Cursor's own portal and `api2.cursor.sh`.
 
+## Cursor allowance
+
+Cursor Bridge does not publish a quota endpoint. Its documented routes are chat completions, the Responses API, Anthropic messages, token counting, and the model list. This integration does not invent a remaining balance from those calls.
+
+The Cursor dashboard pages under `cursor.com/api/` need the browser session cookie. Smart LLM discards that session after it mints the user API key, so those cookie routes are not called.
+
+For a Cursor entry, Smart LLM asks Cursor for the current billing period with the stored user API key:
+
+1. `POST https://api2.cursor.sh/auth/exchange_user_api_key` with `Authorization: Bearer` set to the user API key. The response access token is kept in memory only. It is not written to the config entry, diagnostics, or logs.
+2. `POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage` with that access token and `Connect-Protocol-Version: 1`.
+
+That is the same unofficial Connect API the login flow already uses to mint a key (`CreateUserApiKey`, `GetMe`). Cursor can change it. Sensors refresh about every 30 minutes. If a field is missing, that sensor stays unknown. If the call fails, the sensors are unavailable and Assist chat is left alone.
+
+| Sensor | Source |
+| --- | --- |
+| Included usage remaining | `planUsage.remaining`, US cents divided by 100, shown as USD. The raw cents value is an attribute |
+| Included usage used | `planUsage.totalPercentUsed`, copied as Cursor returned it |
+| Allowance resets | `billingCycleEnd`, Unix milliseconds, shown as a timestamp |
+
+`planUsage.limit`, spend, and `displayMessage` are attributes on the remaining sensor. They are copied from the response. OpenAI, Anthropic, and local servers do not get these sensors. Those APIs do not return a subscription allowance here, and this integration does not count requests locally as a stand-in for quota.
+
 ## Provider interface
 
-[v1.1.0](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.0) registers three clients: Cursor, an OpenAI-compatible client (menu label **OpenAI**), and an Anthropic-compatible client (menu label **Anthropic**). A service that speaks one of those APIs uses the matching client. Official mode calls that protocol's public cloud. Custom base URL keeps the same headers and calls the host you enter. Another protocol implements `ChatProvider` in `custom_components/smart_llm/provider/base.py`, registers in `provider/registry.py`, and adds its own config-flow step. Cursor keeps the browser login.
+Version 1.2.0 registers three clients: Cursor, an OpenAI-compatible client (menu label **OpenAI**), and an Anthropic-compatible client (menu label **Anthropic**). A service that speaks one of those APIs uses the matching client. Official mode calls that protocol's public cloud. Custom base URL keeps the same request style and calls the host you enter. An OpenAI-compatible custom base URL may omit the API key. Another protocol implements `ChatProvider` in `custom_components/smart_llm/provider/base.py`, registers in `provider/registry.py`, and adds its own config-flow step. Cursor keeps the browser login.
 
 ## License
 

@@ -25,9 +25,17 @@ _CREDENTIAL_FIELDS = (
 )
 
 
-def api_provider_unique_id(provider: str, api_key: str) -> str:
-    """Stable id for one pasted API key. The raw key is not part of the result."""
-    digest = hashlib.sha256(f"{provider}\0{api_key}".encode("utf-8")).hexdigest()
+def api_provider_unique_id(
+    provider: str, api_key: str, *, base_url: str = ""
+) -> str:
+    """Stable id for one pasted API key. The raw key is not part of the result.
+
+    A non-empty key ignores ``base_url``, so existing entries keep their id.
+    An empty key (a local OpenAI-compatible server) includes the base URL so
+    two hosts without a key are not treated as the same account.
+    """
+    material = api_key if api_key else f"\0{base_url}"
+    digest = hashlib.sha256(f"{provider}\0{material}".encode("utf-8")).hexdigest()
     return f"{provider}-{digest[:16]}"
 
 

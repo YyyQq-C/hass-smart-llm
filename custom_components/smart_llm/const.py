@@ -51,6 +51,13 @@ CURSOR_LOGIN_PATH = "/loginDeepControl"
 CURSOR_POLL_PATH = "/auth/poll"
 CURSOR_CREATE_API_KEY_PATH = "/aiserver.v1.DashboardService/CreateUserApiKey"
 CURSOR_GET_ME_PATH = "/aiserver.v1.DashboardService/GetMe"
+# User API key -> short-lived access token. The token is not stored.
+CURSOR_EXCHANGE_API_KEY_PATH = "/auth/exchange_user_api_key"
+# Current billing period. Amounts are US cents. Not a Cursor Bridge route.
+CURSOR_PERIOD_USAGE_PATH = "/aiserver.v1.DashboardService/GetCurrentPeriodUsage"
+
+# How often Cursor allowance sensors ask for the current period.
+CURSOR_USAGE_INTERVAL_MINUTES = 30
 
 # OpenAI-compatible Cursor Bridge. Unofficial community service.
 DEFAULT_BRIDGE_BASE_URL = "https://cursorbridge.dev/v1"
