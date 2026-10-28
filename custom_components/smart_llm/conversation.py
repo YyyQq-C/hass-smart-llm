@@ -17,6 +17,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     AGENT_NAME,
+    CONF_API_KEY_TTL,
     CONF_CONNECTION_MODE,
     CONF_MODEL,
     CONF_PROVIDER,
@@ -28,6 +29,8 @@ from .const import (
     PROVIDER_LABELS,
     default_model_for,
 )
+from .expiry_notice import async_sync_cursor_key_notice, start_reauth_once
+from .key_expiry import EXPIRY_EXPIRED, classify_key_expiry
 from .provider.base import ChatResponse
 from .provider.errors import ProviderAPIError, ProviderAuthError
 from .provider.messages import function_tool, openai_messages_from_contents
@@ -39,6 +42,10 @@ PARALLEL_UPDATES = 0
 _MESSAGES = {
     "en": {
         "auth": "Smart LLM needs you to authorize Cursor again.",
+        "auth_expired": (
+            "The Cursor API key has expired. "
+            "Open Smart LLM options and choose Re-authorize."
+        ),
         "auth_api": "Smart LLM rejected the API key. Enter a new key in the integration options.",
         "api": "The model request failed: {detail}",
         "empty": "The model returned an empty response.",
@@ -47,6 +54,7 @@ _MESSAGES = {
     },
     "zh": {
         "auth": "Smart LLM 需要你重新授权 Cursor。",
+        "auth_expired": "Cursor API 密钥已过期。请打开 Smart LLM 选项并选择重新授权。",
         "auth_api": "Smart LLM 拒绝了这把 API 密钥。请在集成选项里填写新密钥。",
         "api": "模型请求失败：{detail}",
         "empty": "模型返回了空回复。",
@@ -109,6 +117,10 @@ class SmartLLMConversationEntity(conversation.ConversationEntity):
         }
         if provider == PROVIDER_CURSOR:
             attributes["bridge_base_url"] = runtime.base_url
+            status = classify_key_expiry(self._entry.data, _now_ms())
+            attributes["api_key_ttl"] = self._entry.data.get(CONF_API_KEY_TTL)
+            attributes["api_key_expires_at"] = status.expires_at_ms
+            attributes["api_key_expiry"] = status.state
         else:
             attributes["connection_mode"] = self._entry.options.get(
                 CONF_CONNECTION_MODE, CONNECTION_OFFICIAL
@@ -149,6 +161,12 @@ class SmartLLMConversationEntity(conversation.ConversationEntity):
             return _failure(user_input, "setup")
 
         provider = self._entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
+        if provider == PROVIDER_CURSOR:
+            status = classify_key_expiry(self._entry.data, _now_ms())
+            if status.state == EXPIRY_EXPIRED:
+                await async_sync_cursor_key_notice(self.hass, self._entry)
+                start_reauth_once(self.hass, self._entry)
+                return _failure(user_input, "auth_expired")
         model = self._entry.options.get(CONF_MODEL, default_model_for(provider))
         try:
             for _iteration in range(MAX_TOOL_ITERATIONS):
@@ -181,7 +199,7 @@ class SmartLLMConversationEntity(conversation.ConversationEntity):
                     provider,
                 )
                 auth_key = "auth_api"
-            _start_reauth_once(self.hass, self._entry)
+            start_reauth_once(self.hass, self._entry)
             return _failure(user_input, auth_key)
         except ProviderAPIError as err:
             _LOGGER.warning("Model request failed (HTTP %s)", err.status)
@@ -284,15 +302,7 @@ def _language(language: str | None) -> str:
     return "en"
 
 
-def _start_reauth_once(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Start a reauth flow unless one is already in progress for this entry."""
-    from homeassistant.config_entries import SOURCE_REAUTH
+def _now_ms() -> int:
+    import time
 
-    for flow in hass.config_entries.flow.async_progress():
-        context = flow.get("context") or {}
-        if (
-            context.get("source") == SOURCE_REAUTH
-            and context.get("entry_id") == entry.entry_id
-        ):
-            return
-    entry.async_start_reauth(hass)
+    return int(time.time() * 1000)

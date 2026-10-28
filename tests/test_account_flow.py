@@ -13,6 +13,7 @@ from custom_components.smart_llm.const import (
     AGENT_NAME,
     CONF_API_KEY_ENCRYPTED,
     CONF_API_KEY_EXPIRES_AT,
+    CONF_API_KEY_TTL,
     CONF_EMAIL,
     CONF_MODEL,
     CONF_PROVIDER,
@@ -42,6 +43,7 @@ def _stored_entry() -> dict[str, object]:
         CONF_PROVIDER: PROVIDER_CURSOR,
         CONF_API_KEY_ENCRYPTED: "fernet-token",
         CONF_API_KEY_EXPIRES_AT: 1_700_000_000_000,
+        CONF_API_KEY_TTL: "90",
         CONF_EMAIL: _EMAIL,
         "unrelated": "kept",
     }
@@ -84,6 +86,7 @@ def test_logout_removes_key_expiry_and_email() -> None:
     cleared = without_stored_credentials(_stored_entry())
     assert CONF_API_KEY_ENCRYPTED not in cleared
     assert CONF_API_KEY_EXPIRES_AT not in cleared
+    assert CONF_API_KEY_TTL not in cleared
     assert CONF_EMAIL not in cleared
     assert cleared[CONF_PROVIDER] == PROVIDER_CURSOR
     assert cleared["unrelated"] == "kept"
@@ -94,6 +97,7 @@ def test_reauth_can_keep_email_when_the_new_login_has_none() -> None:
     assert kept[CONF_EMAIL] == _EMAIL
     assert CONF_API_KEY_ENCRYPTED not in kept
     assert CONF_API_KEY_EXPIRES_AT not in kept
+    assert CONF_API_KEY_TTL not in kept
 
 
 def test_reauth_rejects_a_different_account_and_switch_allows_it() -> None:
@@ -180,6 +184,7 @@ def test_assist_name_and_flow_steps_do_not_embed_the_email() -> None:
     assert "allow_different_account=True" in config_flow
     assert '"account": result.email' not in config_flow
     assert "display_account(result.email)" in config_flow
+    assert "ttl=ttl" in config_flow
 
 
 def test_translation_catalogs_offer_logout_and_switch_without_a_raw_email() -> None:
@@ -203,6 +208,14 @@ def test_translation_catalogs_offer_logout_and_switch_without_a_raw_email() -> N
         assert key in parsed[0]["options"]["step"]
     assert "switch_successful" in parsed[0]["options"]["abort"]
     assert "logged_out" in parsed[0]["options"]["abort"]
+    assert "{key_expiry}" in parsed[0]["options"]["step"]["init"]["description"]
+    ttl_options = parsed[0]["selector"]["api_key_ttl"]["options"]
+    assert list(ttl_options) == ["30", "90", "180", "365", "never"]
+    assert "cursor_api_key_expiring" in parsed[0]["issues"]
+    assert "cursor_api_key_expired" in parsed[0]["issues"]
+    flow_source = (_COMPONENT / "config_flow.py").read_text(encoding="utf-8")
+    assert "ttl=ttl" in flow_source
+    assert "CONF_API_KEY_TTL" in flow_source
 
     def keys(value: object) -> list[str]:
         if isinstance(value, dict):

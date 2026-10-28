@@ -25,7 +25,7 @@ The domain is `smart_llm`.
 
 ## Features
 
-- **Cursor.** Browser sign-in uses the same PKCE handshake as the Cursor TypeScript SDK and `agent login`. Home Assistant stores a minted user API key, encrypted on this install. Account screens show a mask such as `y**@g**.com`. Log out or switch account from the integration options. The entry title and the Assist entity stay **Cursor**.
+- **Cursor.** Browser sign-in uses the same PKCE handshake as the Cursor TypeScript SDK and `agent login`. Home Assistant stores a minted user API key, encrypted on this install. The login step chooses 30, 90, 180, or 365 days, or a permanent key. Account screens show a mask such as `y**@g**.com`. Log out or switch account from the integration options. The entry title and the Assist entity stay **Cursor**.
 - **OpenAI-compatible (menu: OpenAI).** Paste an API key, or leave it empty for a local server that does not check one. Official API sends `Authorization: Bearer` to `https://api.openai.com/v1` and still requires a key. Custom base URL sends the chat-completions request to a host you choose: Azure OpenAI, OpenRouter, Ollama, vLLM, LM Studio, LocalAI, or any other OpenAI-compatible service. A key, when present, is sent as `Authorization: Bearer`. An empty key omits that header.
 - **Cursor allowance.** For a Cursor entry, sensors show included usage still left, the percent Cursor reports, and when the billing period ends. See [Cursor allowance](#cursor-allowance).
 - **Anthropic-compatible (menu: Anthropic).** Paste an API key. Official API sends `x-api-key` and `anthropic-version: 2023-06-01` to `https://api.anthropic.com` (`POST /v1/messages`). Custom base URL keeps those headers and sends them to an Anthropic-compatible gateway.
@@ -58,7 +58,7 @@ That link only opens this custom repository. It does not mean Smart LLM is in th
 
 ### Update
 
-To install a published release on an existing setup, update inside HACS. Leave the custom repository and the Smart LLM config entries in place. The manifest version in this tree is `1.2.0`. A GitHub release is published separately.
+To install a published release on an existing setup, update inside HACS. Leave the custom repository and the Smart LLM config entries in place. The manifest version in this tree is `1.3.0`. A GitHub release is published separately.
 
 1. Open HACS → Integrations → **Smart LLM**.
 2. When HACS offers a newer version, choose **Update**. To fetch the current release again, open the menu and choose **Redownload**.
@@ -81,10 +81,10 @@ Replace that directory with the new release, then restart, when you update witho
 1. Go to Settings → Devices & services → Add integration → **Smart LLM**.
 2. Choose **Cursor**.
 3. Open the login URL and approve it on the Cursor portal. The verifier stays on Home Assistant and is not in that URL.
-4. Submit. Home Assistant polls until login finishes, then mints a user API key named `Home Assistant Smart LLM` (90 days).
+4. Choose a key lifetime: 30, 90 (the default), 180, or 365 days, or permanent. Submit. Home Assistant polls until login finishes, then mints a user API key named `Home Assistant Smart LLM`. A finite choice sends `expiresAt` to Cursor. Permanent omits that field, which is how Cursor's API mints a key with no expiry.
 5. Confirm that Cursor Bridge is unofficial, then pick a model. `default` lets Cursor choose.
 
-The browser session token is discarded after minting. Home Assistant stores only the API key, encrypted with a key derived from this install's instance id (`.storage/core.uuid`). Diagnostics and the entity attribute show the mask, such as `crsr_••••••••wxyz`.
+The browser session token is discarded after minting. Home Assistant stores the API key, encrypted with a key derived from this install's instance id (`.storage/core.uuid`), and stores the expiry you chose (or never) on the config entry. Diagnostics and the entity attribute show the mask, such as `crsr_••••••••wxyz`. The expiry is not a secret.
 
 If team policy blocks user API keys, login can succeed and minting can still fail. A team admin has to allow user keys.
 
@@ -104,7 +104,11 @@ Open the integration options to change how Assist calls Cursor.
 
 The options screens show the account as a mask such as `y**@g**.com`, never the full address. The voice assistant card and the integration title stay **Cursor**.
 
-Logging out removes the key from Home Assistant. The key remains valid in the Cursor dashboard until it expires or you revoke it there. The entry then needs authorization again before Assist can use this agent. Switching accounts signs out first, then uses the same browser login as the first setup. Re-authorize still expects the same Cursor account.
+Logging out removes the key from Home Assistant. The key remains valid in the Cursor dashboard until it expires or you revoke it there. The entry then needs authorization again before Assist can use this agent. Switching accounts signs out first, then uses the same browser login as the first setup, including the lifetime choice. Re-authorize still expects the same Cursor account and asks for a lifetime again.
+
+### Key expiry
+
+Finite keys are checked while the entry is loaded. About 7 days before the stored expiry, Home Assistant raises a repair and a persistent notification. When the key expires, that notice is updated, Assist replies that you need to re-authorize, and the allowance sensors become unavailable. Use the repair, or open the integration options and choose Re-authorize. The same notice is not repeated on every refresh. A permanent key has no expiry reminder. An older entry that never stored an expiry is left alone, so it is not marked expired.
 
 ## OpenAI-compatible and Anthropic-compatible
 
@@ -231,7 +235,7 @@ That is the same unofficial Connect API the login flow already uses to mint a ke
 
 ## Provider interface
 
-Version 1.2.0 registers three clients: Cursor, an OpenAI-compatible client (menu label **OpenAI**), and an Anthropic-compatible client (menu label **Anthropic**). A service that speaks one of those APIs uses the matching client. Official mode calls that protocol's public cloud. Custom base URL keeps the same request style and calls the host you enter. An OpenAI-compatible custom base URL may omit the API key. Another protocol implements `ChatProvider` in `custom_components/smart_llm/provider/base.py`, registers in `provider/registry.py`, and adds its own config-flow step. Cursor keeps the browser login.
+Smart LLM registers three clients: Cursor, an OpenAI-compatible client (menu label **OpenAI**), and an Anthropic-compatible client (menu label **Anthropic**). A service that speaks one of those APIs uses the matching client. Official mode calls that protocol's public cloud. Custom base URL keeps the same request style and calls the host you enter. An OpenAI-compatible custom base URL may omit the API key. Another protocol implements `ChatProvider` in `custom_components/smart_llm/provider/base.py`, registers in `provider/registry.py`, and adds its own config-flow step. Cursor keeps the browser login.
 
 ## License
 

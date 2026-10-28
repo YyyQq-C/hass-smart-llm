@@ -17,11 +17,13 @@
       },
       "cursor_link": {
         "title": "授权 Cursor",
-        "description": "打开下面的网址并批准 Smart LLM（{account}）。登录校验码只留在这台 Home Assistant 上，不会出现在网址里。\n\n{login_url}\n\n批准之后提交，开始等待 Cursor。",
+        "description": "先选择新 API 密钥的有效期，再打开下面的网址并批准 Smart LLM（{account}）。永久有效的密钥不会过期，除非你在 Cursor 控制台里撤销它。登录校验码只留在这台 Home Assistant 上，不会出现在网址里。\n\n{login_url}\n\n批准之后提交，开始等待 Cursor。",
         "data": {
+          "api_key_ttl": "密钥有效期",
           "login_url": "登录网址"
         },
         "data_description": {
+          "api_key_ttl": "30、90、180 或 365 天，或永久。永久会省略 Cursor 在 CreateUserApiKey 上接受的到期时间。默认是 90 天。",
           "login_url": "如果上面的链接不好复制，用这个字段。修改它不会生效。"
         }
       },
@@ -107,7 +109,8 @@
       "provider_auth": "该端点拒绝了这把 API 密钥。",
       "provider_connect": "无法连接到该端点。请检查官方端点或自定义基础 URL 后重试。",
       "provider_no_models": "没能从该端点加载模型列表。你仍可以手动填写模型 id。",
-      "invalid_connection_mode": "请选择官方端点或自定义基础 URL。"
+      "invalid_connection_mode": "请选择官方端点或自定义基础 URL。",
+      "invalid_ttl": "请选择 30、90、180 或 365 天，或永久。"
     },
     "abort": {
       "already_configured": "这个 Cursor 账号已经配置过。",
@@ -122,7 +125,7 @@
     "step": {
       "init": {
         "title": "Smart LLM",
-        "description": "账号：{account}。API 密钥：{masked_key}。",
+        "description": "账号：{account}。API 密钥：{masked_key}。到期：{key_expiry}。",
         "menu_options": {
           "settings": "模型与 Bridge URL",
           "api_settings": "模型与基础 URL",
@@ -137,7 +140,7 @@
           "settings": "选择模型、Cursor Bridge URL、Assist 工具和补充说明。",
           "api_settings": "按本条目的协议（OpenAI 兼容或 Anthropic 兼容）设置：官方端点或自定义基础 URL（Ollama、vLLM、LM Studio、LocalAI 或其他兼容主机），然后选择模型、Assist 工具和补充说明。",
           "refresh_models": "向当前配置的地址请求模型列表。",
-          "reauth": "打开 Cursor 登录页，并为当前账号签发一把新的 API 密钥。",
+          "reauth": "选择密钥有效期，打开 Cursor 登录页，并为当前账号签发一把新的 API 密钥。",
           "switch_account": "退出当前账号，并登录另一个 Cursor 账号。",
           "update_key": "替换已保存的 API 密钥。",
           "logout": "从 Home Assistant 中移除已保存的 API 密钥。",
@@ -165,11 +168,13 @@
       },
       "cursor_link": {
         "title": "重新授权 Cursor",
-        "description": "账号：{account}。打开下面的网址并批准。只有新密钥签发成功后，才会替换原来的密钥。\n\n{login_url}",
+        "description": "账号：{account}。先选择新 API 密钥的有效期，再打开下面的网址并批准。永久有效的密钥不会过期，除非你在 Cursor 控制台里撤销它。只有新密钥签发成功后，才会替换原来的密钥。\n\n{login_url}",
         "data": {
+          "api_key_ttl": "密钥有效期",
           "login_url": "登录网址"
         },
         "data_description": {
+          "api_key_ttl": "30、90、180 或 365 天，或永久。永久会省略 Cursor 在 CreateUserApiKey 上接受的到期时间。默认是 90 天。",
           "login_url": "如果上面的链接不好复制，用这个字段。修改它不会生效。"
         }
       },
@@ -182,11 +187,13 @@
       },
       "switch_link": {
         "title": "绑定另一个 Cursor 账号",
-        "description": "之前的账号（{account}）已退出。打开下面的网址，用要绑定的 Cursor 账号批准访问。\n\n{login_url}\n\n只有登录成功后才会保存新的 API 密钥，并刷新模型列表。",
+        "description": "之前的账号（{account}）已退出。先选择新 API 密钥的有效期，再打开下面的网址，用要绑定的 Cursor 账号批准访问。永久有效的密钥不会过期，除非你在 Cursor 控制台里撤销它。\n\n{login_url}\n\n只有登录成功后才会保存新的 API 密钥，并刷新模型列表。",
         "data": {
+          "api_key_ttl": "密钥有效期",
           "login_url": "登录网址"
         },
         "data_description": {
+          "api_key_ttl": "30、90、180 或 365 天，或永久。永久会省略 Cursor 在 CreateUserApiKey 上接受的到期时间。默认是 90 天。",
           "login_url": "如果上面的链接不好复制，用这个字段。修改它不会生效。"
         }
       },
@@ -247,7 +254,8 @@
       "provider_auth": "该端点拒绝了这把 API 密钥。",
       "provider_connect": "无法连接到该端点。请检查官方端点或自定义基础 URL 后重试。",
       "provider_no_models": "没能从该端点加载模型列表。你仍可以手动填写模型 id。",
-      "invalid_connection_mode": "请选择官方端点或自定义基础 URL。"
+      "invalid_connection_mode": "请选择官方端点或自定义基础 URL。",
+      "invalid_ttl": "请选择 30、90、180 或 365 天，或永久。"
     },
     "abort": {
       "already_configured": "这个 Cursor 账号已经配置在另一个条目上。",
@@ -267,6 +275,15 @@
         "official": "官方端点（密钥放在请求头）",
         "compatible": "自定义基础 URL"
       }
+    },
+    "api_key_ttl": {
+      "options": {
+        "30": "30 天",
+        "90": "90 天",
+        "180": "180 天",
+        "365": "365 天",
+        "never": "永久（不过期）"
+      }
     }
   },
   "entity": {
@@ -279,6 +296,38 @@
       },
       "allowance_resets": {
         "name": "额度重置时间"
+      }
+    }
+  },
+  "issues": {
+    "cursor_api_key_expiring": {
+      "title": "Cursor API 密钥即将到期",
+      "description": "{account} 的 Cursor API 密钥将于 {expires} 到期。请在此之前到 Smart LLM 选项里重新授权。新密钥会替换已保存的密钥。",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "重新授权 Cursor",
+            "description": "开始浏览器登录，为 {account} 签发一把新的 Cursor API 密钥。当前密钥将于 {expires} 到期。"
+          }
+        },
+        "abort": {
+          "reauth_started": "浏览器登录已开始。请完成登录以签发新的 Cursor API 密钥。在新密钥保存之前，这条提醒会保留。"
+        }
+      }
+    },
+    "cursor_api_key_expired": {
+      "title": "Cursor API 密钥已过期",
+      "description": "{account} 的 Cursor API 密钥已于 {expires} 到期。在 Smart LLM 选项里重新授权之前，Assist 无法使用它。",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "重新授权 Cursor",
+            "description": "开始浏览器登录，为 {account} 签发一把新的 Cursor API 密钥。已保存的密钥已于 {expires} 到期。"
+          }
+        },
+        "abort": {
+          "reauth_started": "浏览器登录已开始。请完成登录以签发新的 Cursor API 密钥。在新密钥保存之前，这条提醒会保留。"
+        }
       }
     }
   }

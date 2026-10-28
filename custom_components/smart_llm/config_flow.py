@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Mapping
 from typing import Any
 
@@ -31,10 +32,13 @@ from homeassistant.helpers.selector import (
 
 from .const import (
     AGENT_NAME,
+    API_KEY_TTL_CHOICES,
+    API_KEY_TTL_DEFAULT,
     CONF_ACKNOWLEDGE_BRIDGE,
     CONF_API_KEY,
     CONF_API_KEY_ENCRYPTED,
     CONF_API_KEY_EXPIRES_AT,
+    CONF_API_KEY_TTL,
     CONF_AVAILABLE_MODELS,
     CONF_BASE_URL,
     CONF_BRIDGE_BASE_URL,
@@ -71,6 +75,13 @@ from .identity import (
     public_title,
     unique_id_for_login,
     without_stored_credentials,
+)
+from .key_expiry import (
+    classify_key_expiry,
+    expiry_label,
+    format_expiry_clock,
+    normalize_ttl,
+    stored_expiry_fields,
 )
 from .provider.cursor_auth import (
     LoginHandshake,
@@ -114,6 +125,20 @@ class _CursorBrowserLogin:
     _login_error: str | None = None
     _link_step_id: str = "cursor_link"
     _pinned_account: str | None = None
+    _api_key_ttl: str | None = None
+
+    def _suggested_ttl(self) -> str:
+        """Lifetime to show. A choice already made in this flow wins."""
+        if self._api_key_ttl in API_KEY_TTL_CHOICES:
+            return self._api_key_ttl
+        entry = getattr(self, "config_entry", None)
+        if entry is None and getattr(self, "source", None) == SOURCE_REAUTH:
+            entry = self._get_reauth_entry()
+        if entry is not None:
+            stored = entry.data.get(CONF_API_KEY_TTL)
+            if stored in API_KEY_TTL_CHOICES:
+                return stored
+        return API_KEY_TTL_DEFAULT
 
     def _display_account(self) -> str:
         """Account label for forms. Subclasses override this."""
@@ -127,12 +152,20 @@ class _CursorBrowserLogin:
     async def async_step_cursor_link(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Show the portal URL, then poll once the user continues."""
+        """Show the portal URL and key lifetime, then poll once the user continues."""
+        errors: dict[str, str] = {}
+        if self._login_error:
+            errors["base"] = self._login_error
         if user_input is not None:
-            self._login_error = None
-            if self._handshake is None:
-                self._handshake = create_login_handshake()
-            return await self.async_step_cursor_poll()
+            ttl = normalize_ttl(user_input.get(CONF_API_KEY_TTL))
+            if ttl is None:
+                errors[CONF_API_KEY_TTL] = "invalid_ttl"
+            else:
+                self._api_key_ttl = ttl
+                self._login_error = None
+                if self._handshake is None:
+                    self._handshake = create_login_handshake()
+                return await self.async_step_cursor_poll()
 
         if self._handshake is None:
             self._handshake = create_login_handshake()
@@ -141,6 +174,15 @@ class _CursorBrowserLogin:
             step_id=self._link_step_id,
             data_schema=vol.Schema(
                 {
+                    vol.Required(
+                        CONF_API_KEY_TTL, default=self._suggested_ttl()
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=list(API_KEY_TTL_CHOICES),
+                            translation_key="api_key_ttl",
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
                     vol.Optional(
                         "login_url",
                         description={"suggested_value": login_url},
@@ -151,7 +193,7 @@ class _CursorBrowserLogin:
                 "login_url": login_url,
                 "account": self._display_account(),
             },
-            errors={"base": self._login_error} if self._login_error else {},
+            errors=errors,
         )
 
     async def async_step_cursor_poll(
@@ -192,9 +234,15 @@ class _CursorBrowserLogin:
     async def _async_run_login(self) -> None:
         assert self._handshake is not None
         try:
+            ttl = (
+                self._api_key_ttl
+                if self._api_key_ttl in API_KEY_TTL_CHOICES
+                else API_KEY_TTL_DEFAULT
+            )
             self._login_result = await async_login_and_mint(
                 async_get_clientsession(self.hass),
                 self._handshake,
+                ttl=ttl,
                 on_get_fallback=lambda message: _LOGGER.warning("%s", message),
             )
             self._login_error = None
@@ -822,7 +870,11 @@ class SmartLLMOptionsFlow(OptionsFlow, _CursorBrowserLogin, _ApiKeySetup):
         return self.async_show_menu(
             step_id="init",
             menu_options=menu,
-            description_placeholders={"masked_key": masked, "account": account},
+            description_placeholders={
+                "masked_key": masked,
+                "account": account,
+                "key_expiry": _key_expiry_placeholder(self.hass, self.config_entry),
+            },
         )
 
     async def async_step_settings(
@@ -988,6 +1040,12 @@ class SmartLLMOptionsFlow(OptionsFlow, _CursorBrowserLogin, _ApiKeySetup):
 
     async def _async_begin_account_switch(self) -> None:
         """Drop the stored key before the replacement login starts."""
+        stored_ttl = self.config_entry.data.get(CONF_API_KEY_TTL)
+        if (
+            self._api_key_ttl not in API_KEY_TTL_CHOICES
+            and stored_ttl in API_KEY_TTL_CHOICES
+        ):
+            self._api_key_ttl = stored_ttl
         self._pinned_account = display_account(self.config_entry.data.get(CONF_EMAIL))
         self._switching_account = True
         self._link_step_id = "switch_link"
@@ -1110,8 +1168,8 @@ async def _credential_data(hass: Any, result: LoginResult) -> dict[str, Any]:
     data: dict[str, Any] = {
         CONF_PROVIDER: PROVIDER_CURSOR,
         CONF_API_KEY_ENCRYPTED: await async_encrypt(hass, result.api_key),
-        CONF_API_KEY_EXPIRES_AT: result.expires_at_ms,
     }
+    data.update(stored_expiry_fields(result.ttl, result.expires_at_ms))
     if result.email:
         data[CONF_EMAIL] = result.email
     return data
@@ -1175,6 +1233,7 @@ async def _async_replace_api_key(
     data[CONF_PROVIDER] = provider
     data[CONF_API_KEY_ENCRYPTED] = await async_encrypt(flow.hass, api_key)
     data.pop(CONF_API_KEY_EXPIRES_AT, None)
+    data.pop(CONF_API_KEY_TTL, None)
     was_loaded = entry.state is ConfigEntryState.LOADED
     flow.hass.config_entries.async_update_entry(
         entry,
@@ -1187,6 +1246,19 @@ async def _async_replace_api_key(
     if getattr(flow, "source", None) == SOURCE_REAUTH:
         return flow.async_abort(reason="reauth_successful")
     return flow.async_abort(reason="api_key_updated")
+
+
+def _key_expiry_placeholder(hass: Any, entry: ConfigEntry) -> str:
+    """Options-menu expiry label. Non-Cursor entries have nothing to track."""
+    if entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR) != PROVIDER_CURSOR:
+        return "—"
+    language = str(getattr(getattr(hass, "config", None), "language", None) or "en")
+    time_zone = getattr(getattr(hass, "config", None), "time_zone", None)
+    status = classify_key_expiry(entry.data, int(time.time() * 1000))
+    when = None
+    if status.expires_at_ms is not None:
+        when = format_expiry_clock(status.expires_at_ms, time_zone=time_zone)
+    return expiry_label(status, when, language=language)
 
 
 async def _identity(hass: Any, entry: ConfigEntry) -> tuple[str, str]:
