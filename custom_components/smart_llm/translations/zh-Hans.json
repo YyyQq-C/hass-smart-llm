@@ -302,12 +302,11 @@
   "issues": {
     "cursor_api_key_expiring": {
       "title": "Cursor API 密钥即将到期",
-      "description": "{account} 的 Cursor API 密钥将于 {expires} 到期。请在此之前到 Smart LLM 选项里重新授权。新密钥会替换已保存的密钥。",
       "fix_flow": {
         "step": {
           "init": {
             "title": "重新授权 Cursor",
-            "description": "开始浏览器登录，为 {account} 签发一把新的 Cursor API 密钥。当前密钥将于 {expires} 到期。"
+            "description": "{account} 的 Cursor API 密钥将于 {expires} 到期。请在此之前重新授权。新密钥会替换已保存的密钥。提交后开始浏览器登录。"
           }
         },
         "abort": {
@@ -317,12 +316,11 @@
     },
     "cursor_api_key_expired": {
       "title": "Cursor API 密钥已过期",
-      "description": "{account} 的 Cursor API 密钥已于 {expires} 到期。在 Smart LLM 选项里重新授权之前，Assist 无法使用它。",
       "fix_flow": {
         "step": {
           "init": {
             "title": "重新授权 Cursor",
-            "description": "开始浏览器登录，为 {account} 签发一把新的 Cursor API 密钥。已保存的密钥已于 {expires} 到期。"
+            "description": "{account} 的 Cursor API 密钥已于 {expires} 到期。在重新授权之前，Assist 无法使用它。提交后开始浏览器登录并签发新密钥。"
           }
         },
         "abort": {

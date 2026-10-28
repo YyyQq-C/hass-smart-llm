@@ -302,12 +302,11 @@
   "issues": {
     "cursor_api_key_expiring": {
       "title": "Cursor API key expires soon",
-      "description": "The Cursor API key for {account} expires on {expires}. Re-authorize in the Smart LLM options before then. A new key replaces the stored one.",
       "fix_flow": {
         "step": {
           "init": {
             "title": "Re-authorize Cursor",
-            "description": "Start browser login to mint a new Cursor API key for {account}. The current key expires on {expires}."
+            "description": "The Cursor API key for {account} expires on {expires}. Re-authorize before then. A new key replaces the stored one. Submit to start browser login."
           }
         },
         "abort": {
@@ -317,12 +316,11 @@
     },
     "cursor_api_key_expired": {
       "title": "Cursor API key expired",
-      "description": "The Cursor API key for {account} expired on {expires}. Assist cannot use it until you re-authorize in the Smart LLM options.",
       "fix_flow": {
         "step": {
           "init": {
             "title": "Re-authorize Cursor",
-            "description": "Start browser login to mint a new Cursor API key for {account}. The stored key expired on {expires}."
+            "description": "The Cursor API key for {account} expired on {expires}. Assist cannot use it until you re-authorize. Submit to start browser login and mint a new key."
           }
         },
         "abort": {
