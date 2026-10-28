@@ -1,9 +1,10 @@
 """OpenAI chat provider.
 
 Official mode calls ``https://api.openai.com/v1`` with
-``Authorization: Bearer <api_key>``. Compatible mode keeps that header and
-uses the configured base URL (Azure OpenAI, OpenRouter, or another
-OpenAI-compatible proxy).
+``Authorization: Bearer <api_key>`` and requires a key. Compatible mode uses
+the configured base URL (Azure OpenAI, OpenRouter, Ollama, vLLM, or another
+OpenAI-compatible server). When that key is empty, the client omits
+``Authorization`` instead of sending an empty bearer token.
 """
 
 from __future__ import annotations
@@ -34,13 +35,16 @@ class OpenAIClient(ChatProvider):
         api_key: str,
         base_url: str = DEFAULT_OPENAI_BASE_URL,
     ) -> None:
-        if not api_key or not api_key.strip():
-            raise ValueError("OpenAI API key is empty")
+        key = api_key.strip() if isinstance(api_key, str) else ""
         self._session = session
-        self._api_key = api_key
         self.base_url = normalize_openai_base_url(base_url)
-        if api_key in self.base_url:
+        # Official OpenAI always requires a key. A custom base URL may be a
+        # local server (Ollama, vLLM) that does not check Authorization.
+        if not key and self.base_url == DEFAULT_OPENAI_BASE_URL:
+            raise ValueError("OpenAI API key is empty")
+        if key and key in self.base_url:
             raise ValueError("API base URL must not include the API key")
+        self._api_key = key
 
     def __repr__(self) -> str:
         return f"OpenAIClient(base_url={self.base_url!r})"
@@ -83,10 +87,9 @@ class OpenAIClient(ChatProvider):
         timeout: ClientTimeout,
     ) -> Any:
         url = f"{self.base_url}/{path.lstrip('/')}"
-        headers = {
-            "Authorization": f"Bearer {self._api_key}",
-            "Accept": "application/json",
-        }
+        headers = {"Accept": "application/json"}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
         return await async_request_json(
             self._session,
             method,

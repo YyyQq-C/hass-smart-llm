@@ -54,6 +54,7 @@ from .const import (
 )
 from .crypto import DecryptionError, mask_secret
 from .flow_input import (
+    api_key_is_optional,
     parse_api_key,
     parse_connection,
     parse_model_id,
@@ -93,6 +94,8 @@ _LOGGER = logging.getLogger(__name__)
 
 def masked_provider_title(provider: str, api_key: str) -> str:
     label = PROVIDER_LABELS.get(provider, provider)
+    if not api_key.strip():
+        return label
     return f"{label} ({mask_secret(api_key)})"
 
 
@@ -251,7 +254,11 @@ class _ApiKeySetup:
             CONF_BASE_URL: "",
         }
         if user_input is not None:
-            key, key_errors = parse_api_key(user_input)
+            mode = str(
+                user_input.get(CONF_CONNECTION_MODE) or CONNECTION_OFFICIAL
+            ).strip()
+            allow_empty = api_key_is_optional(self._api_provider, mode)
+            key, key_errors = parse_api_key(user_input, allow_empty=allow_empty)
             parsed, conn_errors = parse_connection(self._api_provider, user_input)
             errors.update(key_errors)
             errors.update(conn_errors)
@@ -263,7 +270,7 @@ class _ApiKeySetup:
             }
             if key:
                 suggested[CONF_API_KEY] = key
-            if not errors and key and parsed is not None:
+            if not errors and key is not None and parsed is not None:
                 self._plain_api_key = key
                 self._connection_mode = parsed.mode
                 self._resolved_base = parsed.base_url
@@ -273,6 +280,9 @@ class _ApiKeySetup:
                     self._plain_api_key = None
                 elif list_error == "invalid_url":
                     errors[CONF_BASE_URL] = "invalid_url"
+                    self._plain_api_key = None
+                elif list_error == "invalid_api_key":
+                    errors[CONF_API_KEY] = "invalid_api_key"
                     self._plain_api_key = None
                 else:
                     self._api_list_error = list_error
@@ -290,7 +300,7 @@ class _ApiKeySetup:
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Pick the model used by Assist. The key is already in memory."""
-        if not self._plain_api_key or self._api_provider is None:
+        if self._plain_api_key is None or self._api_provider is None:
             return await self.async_step_api_key()
         errors: dict[str, str] = {}
         models = list(self._api_models or [])
@@ -319,6 +329,8 @@ class _ApiKeySetup:
                     errors[CONF_BASE_URL] = "invalid_url"
                 elif list_error == "provider_auth":
                     errors["base"] = "provider_auth"
+                elif list_error == "invalid_api_key":
+                    errors["base"] = "api_key_required"
                 elif list_error == "provider_connect":
                     errors["base"] = "provider_connect"
                 elif list_error == "provider_no_models":
@@ -397,6 +409,15 @@ class _ApiKeySetup:
                 errors[CONF_MODEL] = "invalid_model"
             prompt = str(user_input.get(CONF_PROMPT) or "").strip()
             llm_api = _clean_llm_api(user_input.get(CONF_LLM_HASS_API))
+            if (
+                not errors
+                and parsed is not None
+                and model is not None
+                and parsed.mode == CONNECTION_OFFICIAL
+                and provider == PROVIDER_OPENAI
+                and not entry.data.get(CONF_API_KEY_ENCRYPTED)
+            ):
+                errors["base"] = "api_key_required"
             if not errors and parsed is not None and model is not None:
                 updated = dict(current)
                 updated[CONF_CONNECTION_MODE] = parsed.mode
@@ -543,8 +564,10 @@ class _ApiKeySetup:
             if err.status == 404:
                 return "provider_no_models"
             return "provider_connect"
-        except ValueError:
+        except ValueError as err:
             self._api_models = []
+            if "is empty" in str(err):
+                return "invalid_api_key"
             return "invalid_url"
         except Exception:
             self._api_models = []
@@ -562,15 +585,21 @@ class _ApiKeySetup:
         assert self._api_provider is not None
         api_key = self._plain_api_key
         provider = self._api_provider
-        unique_id = api_provider_unique_id(provider, api_key)
+        if not api_key and not api_key_is_optional(provider, parsed.mode):
+            self._plain_api_key = None
+            return self.async_abort(reason="unknown")
+        unique_id = api_provider_unique_id(
+            provider,
+            api_key,
+            base_url="" if api_key else parsed.base_url,
+        )
         existing = await self.async_set_unique_id(unique_id)
         if existing is not None:
             self._plain_api_key = None
             return self.async_abort(reason="provider_already_configured")
-        data = {
-            CONF_PROVIDER: provider,
-            CONF_API_KEY_ENCRYPTED: await async_encrypt(self.hass, api_key),
-        }
+        data: dict[str, Any] = {CONF_PROVIDER: provider}
+        if api_key:
+            data[CONF_API_KEY_ENCRYPTED] = await async_encrypt(self.hass, api_key)
         models = list(self._api_models or [])
         if model not in models:
             models.append(model)
@@ -866,7 +895,7 @@ class SmartLLMOptionsFlow(OptionsFlow, _CursorBrowserLogin, _ApiKeySetup):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Fetch the model list and then return to the settings form."""
-        if not self.config_entry.data.get(CONF_API_KEY_ENCRYPTED):
+        if not _stored_key_or_local_openai(self.config_entry):
             return self.async_abort(reason="logged_out")
         provider = self.config_entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
         if self._refresh_task is None:
@@ -886,9 +915,7 @@ class SmartLLMOptionsFlow(OptionsFlow, _CursorBrowserLogin, _ApiKeySetup):
     async def _async_refresh_models(self) -> None:
         provider = self.config_entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
         try:
-            api_key = await async_decrypt(
-                self.hass, self.config_entry.data[CONF_API_KEY_ENCRYPTED]
-            )
+            api_key = await _async_entry_api_key(self.hass, self.config_entry)
             base_url = resolve_base_url(provider, self.config_entry.options)
             client = create_chat_provider(
                 provider,
@@ -1098,6 +1125,25 @@ def _flow_entry(flow: Any) -> ConfigEntry:
     return flow._get_reauth_entry()
 
 
+def _stored_key_or_local_openai(entry: ConfigEntry) -> bool:
+    """True when a key is stored, or this is a local OpenAI-compatible entry."""
+    if entry.data.get(CONF_API_KEY_ENCRYPTED):
+        return True
+    provider = entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
+    mode = str(entry.options.get(CONF_CONNECTION_MODE) or "")
+    return api_key_is_optional(provider, mode)
+
+
+async def _async_entry_api_key(hass: Any, entry: ConfigEntry) -> str:
+    """Return the stored key, or ``""`` for a local OpenAI-compatible entry."""
+    encrypted = entry.data.get(CONF_API_KEY_ENCRYPTED)
+    if not encrypted:
+        if _stored_key_or_local_openai(entry):
+            return ""
+        raise ValueError("API key is empty")
+    return await async_decrypt(hass, encrypted)
+
+
 def _display_base_url(provider: str, options: Mapping[str, Any]) -> str:
     try:
         return resolve_base_url(provider, options)
@@ -1253,7 +1299,7 @@ def _model_selector(models: list[str]) -> Any:
 def _api_key_schema() -> vol.Schema:
     return vol.Schema(
         {
-            vol.Required(CONF_API_KEY): TextSelector(
+            vol.Optional(CONF_API_KEY): TextSelector(
                 TextSelectorConfig(type=TextSelectorType.PASSWORD)
             ),
             vol.Required(

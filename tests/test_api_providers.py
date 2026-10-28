@@ -23,6 +23,7 @@ from custom_components.smart_llm.const import (
     DEFAULT_OPENAI_BASE_URL,
 )
 from custom_components.smart_llm.flow_input import (
+    api_key_is_optional,
     parse_api_key,
     parse_connection,
     parse_model_id,
@@ -117,6 +118,22 @@ def test_base_urls_for_official_and_compatible_modes() -> None:
         normalize_openai_base_url("https://api.openai.com/v1?api_key=sk-secret")
         == DEFAULT_OPENAI_BASE_URL
     )
+    assert (
+        normalize_openai_base_url("http://127.0.0.1:11434/v1")
+        == "http://127.0.0.1:11434/v1"
+    )
+    assert (
+        normalize_openai_base_url("http://127.0.0.1:11434")
+        == "http://127.0.0.1:11434/v1"
+    )
+    assert (
+        normalize_openai_base_url("http://192.168.1.10:8000/v1/")
+        == "http://192.168.1.10:8000/v1"
+    )
+    assert (
+        normalize_openai_base_url("http://host.docker.internal:11434/v1/models")
+        == "http://host.docker.internal:11434/v1"
+    )
     assert normalize_anthropic_base_url("https://api.anthropic.com/v1") == (
         DEFAULT_ANTHROPIC_BASE_URL
     )
@@ -144,6 +161,14 @@ def test_base_urls_for_official_and_compatible_modes() -> None:
         },
     )
     assert custom == "https://openrouter.ai/api/v1"
+    local = resolve_base_url(
+        "openai",
+        {
+            "connection_mode": CONNECTION_COMPATIBLE,
+            "base_url": "http://127.0.0.1:11434",
+        },
+    )
+    assert local == "http://127.0.0.1:11434/v1"
     assert (
         resolve_base_url("anthropic", {"connection_mode": CONNECTION_OFFICIAL})
         == DEFAULT_ANTHROPIC_BASE_URL
@@ -188,6 +213,19 @@ def test_api_key_step_rejects_blank_and_spaced_keys() -> None:
     assert errors == {}
     assert key == OPENAI_KEY
     assert OPENAI_KEY not in str(errors)
+    blank, errors = parse_api_key({}, allow_empty=True)
+    assert blank == ""
+    assert errors == {}
+    spaces, errors = parse_api_key({"api_key": "   "}, allow_empty=True)
+    assert spaces == ""
+    assert errors == {}
+    spaced_local, errors = parse_api_key({"api_key": "has space"}, allow_empty=True)
+    assert spaced_local is None
+    assert errors["api_key"] == "invalid_api_key"
+    assert api_key_is_optional("openai", "compatible")
+    assert not api_key_is_optional("openai", "official")
+    assert not api_key_is_optional("anthropic", "compatible")
+    assert not api_key_is_optional("cursor", "compatible")
 
 
 def test_official_and_compatible_connection_steps() -> None:
@@ -264,6 +302,16 @@ def test_api_provider_unique_id_does_not_contain_the_key() -> None:
     assert openai_id == api_provider_unique_id("openai", OPENAI_KEY)
     assert openai_id != api_provider_unique_id("anthropic", OPENAI_KEY)
     assert openai_id != api_provider_unique_id("openai", ANTHROPIC_KEY)
+    ollama = api_provider_unique_id(
+        "openai", "", base_url="http://127.0.0.1:11434/v1"
+    )
+    vllm = api_provider_unique_id("openai", "", base_url="http://127.0.0.1:8000/v1")
+    assert ollama.startswith("openai-")
+    assert ollama != vllm
+    assert "11434" not in ollama
+    assert openai_id == api_provider_unique_id(
+        "openai", OPENAI_KEY, base_url="http://127.0.0.1:11434/v1"
+    )
 
 
 def test_translation_strings_have_no_urls_and_match_keys() -> None:
@@ -394,6 +442,75 @@ def test_openai_official_and_custom_base_chat() -> None:
         assert seen[2]["auth"] == f"Bearer {OPENAI_KEY}"
         assert seen[2]["body"]["tool_choice"] == "auto"
         assert custom_reply.content == "Lights on."
+
+    asyncio.run(scenario())
+
+
+def test_openai_local_server_omits_authorization_when_the_key_is_empty() -> None:
+    """Ollama and vLLM accept an OpenAI-compatible base with no API key."""
+
+    async def scenario() -> None:
+        seen: list[dict] = []
+
+        async def models(request: web.Request) -> web.Response:
+            seen.append(
+                {
+                    "path": request.path,
+                    "auth": request.headers.get("Authorization"),
+                }
+            )
+            return web.json_response({"data": [{"id": "llama3.2"}, {"id": "qwen2.5"}]})
+
+        async def chat(request: web.Request) -> web.Response:
+            body = await request.json()
+            seen.append(
+                {
+                    "path": request.path,
+                    "auth": request.headers.get("Authorization"),
+                    "body": body,
+                }
+            )
+            return web.json_response(
+                {
+                    "choices": [
+                        {
+                            "finish_reason": "stop",
+                            "message": {"role": "assistant", "content": "On."},
+                        }
+                    ]
+                }
+            )
+
+        app = web.Application()
+        app.router.add_get("/v1/models", models)
+        app.router.add_post("/v1/chat/completions", chat)
+        server = TestServer(app)
+        await server.start_server()
+        try:
+            root = str(server.make_url("/")).rstrip("/")
+            async with ClientSession() as session:
+                client = create_chat_provider(
+                    "openai",
+                    session=session,
+                    api_key="",
+                    base_url=f"{root}/v1",
+                )
+                assert client.base_url.startswith("http://")
+                assert await client.async_list_models() == ["llama3.2", "qwen2.5"]
+                reply = await client.async_chat(
+                    model="llama3.2",
+                    messages=[{"role": "user", "content": "hi"}],
+                )
+        finally:
+            await server.close()
+
+        assert reply.content == "On."
+        assert seen[0]["path"] == "/v1/models"
+        assert seen[0]["auth"] is None
+        assert seen[1]["path"] == "/v1/chat/completions"
+        assert seen[1]["auth"] is None
+        assert seen[1]["body"]["model"] == "llama3.2"
+        assert "Authorization" not in json.dumps(seen)
 
     asyncio.run(scenario())
 

@@ -18,6 +18,7 @@ from .const import (
     PROVIDER_CURSOR,
 )
 from .identity import mask_email
+from .provider.cursor_usage import usage_diagnostics
 from .provider.urls import resolve_base_url
 
 
@@ -43,4 +44,7 @@ async def async_get_config_entry_diagnostics(
         "bridge_base_url": entry.options.get(CONF_BRIDGE_BASE_URL),
         "model": entry.options.get(CONF_MODEL),
         "available_models": entry.options.get(CONF_AVAILABLE_MODELS),
+        "cursor_usage": usage_diagnostics(
+            getattr(runtime, "usage", None) if runtime is not None else None
+        ),
     }

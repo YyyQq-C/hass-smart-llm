@@ -1,7 +1,10 @@
 """Base URL normalization for OpenAI-compatible and Anthropic endpoints.
 
 Official mode ignores a custom URL and uses the provider default. Compatible
-mode keeps the same API-key header and only changes the host.
+mode keeps the same request style and only changes the host. An
+OpenAI-compatible custom base URL may omit the API key; the client then
+omits the Authorization header. ``http`` and ``https`` are both accepted, so
+a local ``/v1`` base keeps its scheme.
 """
 
 from __future__ import annotations
