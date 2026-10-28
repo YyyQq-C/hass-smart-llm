@@ -17,11 +17,13 @@
       },
       "cursor_link": {
         "title": "Authorize Cursor",
-        "description": "Open this URL and approve access for Smart LLM ({account}). The login verifier stays on this Home Assistant instance and is not part of the URL.\n\n{login_url}\n\nAfter you approve, submit to wait for Cursor.",
+        "description": "Choose how long the new API key stays valid, then open this URL and approve access for Smart LLM ({account}). Permanent does not expire until you revoke the key in the Cursor dashboard. The login verifier stays on this Home Assistant instance and is not part of the URL.\n\n{login_url}\n\nAfter you approve, submit to wait for Cursor.",
         "data": {
+          "api_key_ttl": "Key lifetime",
           "login_url": "Login URL"
         },
         "data_description": {
+          "api_key_ttl": "30, 90, 180, or 365 days, or permanent. Permanent omits the expiry Cursor accepts on CreateUserApiKey. The default is 90 days.",
           "login_url": "Copy this if the link above is hard to select. Editing it has no effect."
         }
       },
@@ -107,7 +109,8 @@
       "provider_auth": "The endpoint rejected this API key.",
       "provider_connect": "Could not reach the endpoint. Check the official endpoint or custom base URL and try again.",
       "provider_no_models": "Could not load models from this endpoint. You can still type a model id.",
-      "invalid_connection_mode": "Choose the official endpoint or a custom base URL."
+      "invalid_connection_mode": "Choose the official endpoint or a custom base URL.",
+      "invalid_ttl": "Choose a key lifetime of 30, 90, 180, or 365 days, or permanent."
     },
     "abort": {
       "already_configured": "This Cursor account is already configured.",
@@ -122,7 +125,7 @@
     "step": {
       "init": {
         "title": "Smart LLM",
-        "description": "Account: {account}. API key: {masked_key}.",
+        "description": "Account: {account}. API key: {masked_key}. Expiry: {key_expiry}.",
         "menu_options": {
           "settings": "Model and Bridge URL",
           "api_settings": "Model and base URL",
@@ -137,7 +140,7 @@
           "settings": "Choose the model, Cursor Bridge URL, Assist tools, and extra instructions.",
           "api_settings": "OpenAI-compatible or Anthropic-compatible, matching this entry: official endpoint or a custom base URL (Ollama, vLLM, LM Studio, LocalAI, or another compatible host), then the model, Assist tools, and extra instructions.",
           "refresh_models": "Request the model list from the configured endpoint.",
-          "reauth": "Open the Cursor login page and mint a new API key for this account.",
+          "reauth": "Choose a key lifetime, open the Cursor login page, and mint a new API key for this account.",
           "switch_account": "Sign out and link a different Cursor account.",
           "update_key": "Replace the stored API key.",
           "logout": "Remove the stored API key from Home Assistant.",
@@ -165,11 +168,13 @@
       },
       "cursor_link": {
         "title": "Re-authorize Cursor",
-        "description": "Account: {account}. Open this URL and approve access. The previous key is replaced only after a new key is minted.\n\n{login_url}",
+        "description": "Account: {account}. Choose how long the new API key stays valid, then open this URL and approve access. Permanent does not expire until you revoke the key in the Cursor dashboard. The previous key is replaced only after a new key is minted.\n\n{login_url}",
         "data": {
+          "api_key_ttl": "Key lifetime",
           "login_url": "Login URL"
         },
         "data_description": {
+          "api_key_ttl": "30, 90, 180, or 365 days, or permanent. Permanent omits the expiry Cursor accepts on CreateUserApiKey. The default is 90 days.",
           "login_url": "Copy this if the link above is hard to select. Editing it has no effect."
         }
       },
@@ -182,11 +187,13 @@
       },
       "switch_link": {
         "title": "Link another Cursor account",
-        "description": "The previous account ({account}) has been signed out. Open this URL and approve access with the Cursor account you want to link.\n\n{login_url}\n\nA new API key is stored only after login succeeds, and the model list is refreshed.",
+        "description": "The previous account ({account}) has been signed out. Choose how long the new API key stays valid, then open this URL and approve access with the Cursor account you want to link. Permanent does not expire until you revoke the key in the Cursor dashboard.\n\n{login_url}\n\nA new API key is stored only after login succeeds, and the model list is refreshed.",
         "data": {
+          "api_key_ttl": "Key lifetime",
           "login_url": "Login URL"
         },
         "data_description": {
+          "api_key_ttl": "30, 90, 180, or 365 days, or permanent. Permanent omits the expiry Cursor accepts on CreateUserApiKey. The default is 90 days.",
           "login_url": "Copy this if the link above is hard to select. Editing it has no effect."
         }
       },
@@ -247,7 +254,8 @@
       "provider_auth": "The endpoint rejected this API key.",
       "provider_connect": "Could not reach the endpoint. Check the official endpoint or custom base URL and try again.",
       "provider_no_models": "Could not load models from this endpoint. You can still type a model id.",
-      "invalid_connection_mode": "Choose the official endpoint or a custom base URL."
+      "invalid_connection_mode": "Choose the official endpoint or a custom base URL.",
+      "invalid_ttl": "Choose a key lifetime of 30, 90, 180, or 365 days, or permanent."
     },
     "abort": {
       "already_configured": "This Cursor account is already configured on another entry.",
@@ -267,6 +275,15 @@
         "official": "Official endpoint (key in header)",
         "compatible": "Custom base URL"
       }
+    },
+    "api_key_ttl": {
+      "options": {
+        "30": "30 days",
+        "90": "90 days",
+        "180": "180 days",
+        "365": "365 days",
+        "never": "Permanent (no expiry)"
+      }
     }
   },
   "entity": {
@@ -279,6 +296,36 @@
       },
       "allowance_resets": {
         "name": "Allowance resets"
+      }
+    }
+  },
+  "issues": {
+    "cursor_api_key_expiring": {
+      "title": "Cursor API key expires soon",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Re-authorize Cursor",
+            "description": "The Cursor API key for {account} expires on {expires}. Re-authorize before then. A new key replaces the stored one. Submit to start browser login."
+          }
+        },
+        "abort": {
+          "reauth_started": "Browser login has started. Finish it to mint a new Cursor API key. This reminder stays until that key is saved."
+        }
+      }
+    },
+    "cursor_api_key_expired": {
+      "title": "Cursor API key expired",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Re-authorize Cursor",
+            "description": "The Cursor API key for {account} expired on {expires}. Assist cannot use it until you re-authorize. Submit to start browser login and mint a new key."
+          }
+        },
+        "abort": {
+          "reauth_started": "Browser login has started. Finish it to mint a new Cursor API key. This reminder stays until that key is saved."
+        }
       }
     }
   }

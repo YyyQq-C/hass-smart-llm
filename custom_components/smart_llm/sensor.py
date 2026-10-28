@@ -7,11 +7,16 @@ subscription balance to this integration.
 
 A failed refresh leaves the sensors unavailable. It does not start reauth.
 Chat can still work when the usage call does not.
+
+An expired user API key skips the usage call. The sensors are unavailable
+and carry a re-authorize hint. The expiry notice is updated from the same
+refresh, and again on the integration's hourly check.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from datetime import timedelta
 from typing import Any
 
@@ -41,6 +46,8 @@ from .const import (
     PROVIDER_CURSOR,
 )
 from .crypto import DecryptionError
+from .expiry_notice import async_sync_cursor_key_notice
+from .key_expiry import EXPIRY_EXPIRED, classify_key_expiry, expired_hint
 from .provider.cursor_usage import (
     AccessTokenCache,
     CursorPeriodUsage,
@@ -63,6 +70,11 @@ async def async_setup_entry(
     cache = AccessTokenCache()
 
     async def _async_update() -> CursorPeriodUsage:
+        await async_sync_cursor_key_notice(hass, entry)
+        status = classify_key_expiry(entry.data, int(time.time() * 1000))
+        if status.state == EXPIRY_EXPIRED:
+            language = str(getattr(hass.config, "language", None) or "en")
+            raise UpdateFailed(expired_hint(language))
         try:
             api_key = await async_decrypt(hass, entry.data[CONF_API_KEY_ENCRYPTED])
         except DecryptionError as err:
@@ -110,6 +122,7 @@ class _CursorUsageEntity(CoordinatorEntity[DataUpdateCoordinator[CursorPeriodUsa
         unique_suffix: str,
     ) -> None:
         super().__init__(coordinator)
+        self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}-{unique_suffix}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
@@ -125,6 +138,16 @@ class _CursorUsageEntity(CoordinatorEntity[DataUpdateCoordinator[CursorPeriodUsa
         if isinstance(data, CursorPeriodUsage):
             return data
         return None
+
+    def _expiry_attributes(self) -> dict[str, Any]:
+        status = classify_key_expiry(self._entry.data, int(time.time() * 1000))
+        if status.state != EXPIRY_EXPIRED:
+            return {}
+        language = str(getattr(self.hass.config, "language", None) or "en")
+        return {
+            "reauth_required": True,
+            "unavailable_reason": expired_hint(language),
+        }
 
 
 class CursorRemainingSensor(_CursorUsageEntity):
@@ -155,7 +178,7 @@ class CursorRemainingSensor(_CursorUsageEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         usage = self._usage
         if usage is None:
-            return {}
+            return self._expiry_attributes()
         return {
             "remaining_cents": usage.remaining_cents,
             "limit_cents": usage.limit_cents,
@@ -163,6 +186,7 @@ class CursorRemainingSensor(_CursorUsageEntity):
             "total_spend_cents": usage.total_spend_cents,
             "included_spend_cents": usage.included_spend_cents,
             "display_message": usage.display_message,
+            **self._expiry_attributes(),
         }
 
 
@@ -193,11 +217,12 @@ class CursorPercentSensor(_CursorUsageEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         usage = self._usage
         if usage is None:
-            return {}
+            return self._expiry_attributes()
         return {
             "auto_percent_used": usage.auto_percent_used,
             "api_percent_used": usage.api_percent_used,
             "display_message": usage.display_message,
+            **self._expiry_attributes(),
         }
 
 
@@ -225,6 +250,10 @@ class CursorResetSensor(_CursorUsageEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         usage = self._usage
+        hint = self._expiry_attributes()
         if usage is None or usage.billing_cycle_start is None:
-            return {}
-        return {"billing_cycle_start": usage.billing_cycle_start.isoformat()}
+            return hint
+        return {
+            "billing_cycle_start": usage.billing_cycle_start.isoformat(),
+            **hint,
+        }

@@ -11,9 +11,12 @@ Flow (``@cursor/sdk`` ``login-flow.ts`` / ``Cursor.auth.login``):
    A route-not-found 404 falls back once to ``GET /auth/poll``, which is the
    older endpoint and does put the verifier in the query string.
 4. Use the short-lived access token once, to call
-   ``DashboardService/CreateUserApiKey``, then discard it. Optionally read the
-   account email from ``GetMe``. The minted user API key is the only
-   credential the integration stores.
+   ``DashboardService/CreateUserApiKey``, then discard it. ``expiresAt`` is
+   sent for a finite lifetime and omitted for a permanent key (the SDK mint
+   step does the same). Optionally read the account email from ``GetMe``.
+   The minted user API key is the only credential the integration stores.
+   The response does not include an expiry, so the integration stores the
+   lifetime it requested.
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from aiohttp import ClientError, ClientSession, ClientTimeout
 from ..const import (
     API_KEY_NAME,
     API_KEY_TTL_MS,
+    API_KEY_TTL_NEVER,
     CURSOR_API_BASE_URL,
     CURSOR_CREATE_API_KEY_PATH,
     CURSOR_GET_ME_PATH,
@@ -46,6 +50,7 @@ from ..const import (
     POLL_MAX_ATTEMPTS,
     POLL_MAX_DELAY_MS,
 )
+from ..key_expiry import ttl_to_milliseconds
 from .errors import CursorLoginError
 from .http_util import read_body
 
@@ -73,11 +78,16 @@ class LoginTokens:
 
 @dataclass(frozen=True, slots=True)
 class LoginResult:
-    """Minted user API key plus optional account email."""
+    """Minted user API key plus optional account email.
+
+    ``expires_at_ms`` is None when the key does not expire. ``ttl`` is the
+    choice the user made (``30``, ``90``, ``180``, ``365``, or ``never``).
+    """
 
     api_key: str
     email: str | None
-    expires_at_ms: int
+    expires_at_ms: int | None
+    ttl: str | None = None
 
 
 def strip_trailing_slashes(url: str) -> str:
@@ -108,14 +118,30 @@ async def async_login_and_mint(
     *,
     api_base_url: str = CURSOR_API_BASE_URL,
     key_name: str = API_KEY_NAME,
-    ttl_ms: int = API_KEY_TTL_MS,
+    ttl_ms: int | None = API_KEY_TTL_MS,
+    ttl: str | None = None,
     max_attempts: int = POLL_MAX_ATTEMPTS,
     base_delay_ms: int = POLL_BASE_DELAY_MS,
     max_delay_ms: int = POLL_MAX_DELAY_MS,
     on_get_fallback: Callable[[str], None] | None = None,
 ) -> LoginResult:
-    """Poll until the browser login completes, then mint a user API key."""
-    if ttl_ms <= 0:
+    """Poll until the browser login completes, then mint a user API key.
+
+    ``ttl`` is a named choice and overrides ``ttl_ms``. ``ttl="never"`` and
+    ``ttl_ms=None`` omit ``expiresAt`` on CreateUserApiKey, which is how the
+    Cursor SDK mints a key that does not expire.
+    """
+    stored_ttl = ttl
+    if ttl is not None:
+        try:
+            ttl_ms = ttl_to_milliseconds(ttl)
+        except ValueError as err:
+            raise CursorLoginError(
+                "unknown", "Unsupported API key lifetime"
+            ) from err
+    elif ttl_ms is None:
+        stored_ttl = API_KEY_TTL_NEVER
+    if ttl_ms is not None and ttl_ms <= 0:
         raise CursorLoginError(
             "unknown", "API key lifetime must be a positive number of milliseconds"
         )
@@ -129,13 +155,14 @@ async def async_login_and_mint(
         max_delay_ms=max_delay_ms,
         on_get_fallback=on_get_fallback,
     )
-    expires_at_ms = int(time.time() * 1000) + ttl_ms
+    expires_at_ms = None if ttl_ms is None else int(time.time() * 1000) + ttl_ms
     return await mint_user_api_key(
         session,
         api_base_url=api_base_url,
         access_token=tokens.access_token,
         name=key_name,
         expires_at_ms=expires_at_ms,
+        ttl=stored_ttl,
     )
 
 
@@ -246,9 +273,16 @@ async def mint_user_api_key(
     api_base_url: str,
     access_token: str,
     name: str,
-    expires_at_ms: int,
+    expires_at_ms: int | None,
+    ttl: str | None = None,
 ) -> LoginResult:
-    """Exchange a browser-login access token for a named user API key."""
+    """Exchange a browser-login access token for a named user API key.
+
+    ``expires_at_ms=None`` omits the optional ``expiresAt`` field. CreateUserApiKey
+    then mints a key that does not expire. A finite expiry is epoch milliseconds,
+    encoded as a string because proto3 JSON sends int64 that way. The response
+    only contains the key, so the caller must keep the expiry it sent.
+    """
     api_base = strip_trailing_slashes(api_base_url)
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -256,8 +290,9 @@ async def mint_user_api_key(
         "Accept": "application/json",
         "Connect-Protocol-Version": "1",
     }
-    # proto3 JSON encodes int64 as a string.
-    body = {"name": name, "expiresAt": str(int(expires_at_ms))}
+    body: dict[str, Any] = {"name": name}
+    if expires_at_ms is not None:
+        body["expiresAt"] = str(int(expires_at_ms))
     try:
         async with session.post(
             f"{api_base}{CURSOR_CREATE_API_KEY_PATH}",
@@ -289,7 +324,10 @@ async def mint_user_api_key(
         )
 
     email = await _get_me(session, api_base, headers)
-    return LoginResult(api_key=api_key, email=email, expires_at_ms=int(expires_at_ms))
+    stored_expires = None if expires_at_ms is None else int(expires_at_ms)
+    return LoginResult(
+        api_key=api_key, email=email, expires_at_ms=stored_expires, ttl=ttl
+    )
 
 
 async def _get_me(

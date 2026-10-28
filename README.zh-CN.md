@@ -25,7 +25,7 @@ Home Assistant Assist 的可插拔对话代理。三条路径各自有一个对�
 
 ## 功能
 
-- **Cursor。** 在浏览器里登录，握手方式与 Cursor TypeScript SDK 和 `agent login` 相同。签发的用户 API 密钥加密保存在这套 Home Assistant 上。账号界面显示掩码，例如 `y**@g**.com`。可以在集成选项里退出登录或切换账号。集成标题和 Assist 实体名称保持为 **Cursor**。
+- **Cursor。** 在浏览器里登录，握手方式与 Cursor TypeScript SDK 和 `agent login` 相同。签发的用户 API 密钥加密保存在这套 Home Assistant 上。登录时可以选择 30、90、180、365 天，或永久有效。账号界面显示掩码，例如 `y**@g**.com`。可以在集成选项里退出登录或切换账号。集成标题和 Assist 实体名称保持为 **Cursor**。
 - **OpenAI 兼容（菜单：OpenAI）。** 粘贴 API 密钥；本地服务不校验密钥时可以留空。官方 API 向 `https://api.openai.com/v1` 发送 `Authorization: Bearer`，并且仍然必须有密钥。自定义基础 URL 把 chat completions 请求发到你指定的主机：Azure OpenAI、OpenRouter、Ollama、vLLM、LM Studio、LocalAI，或其他 OpenAI 兼容服务。有密钥时发送 `Authorization: Bearer`。密钥为空时不发送这个请求头。
 - **Cursor 额度。** Cursor 条目上的传感器显示套餐剩余额度、Cursor 返回的已用比例，以及计费周期结束时间。见[Cursor 额度](#cursor-额度)。
 - **Anthropic 兼容（菜单：Anthropic）。** 粘贴 API 密钥。官方 API 向 `https://api.anthropic.com` 发送 `x-api-key` 和 `anthropic-version: 2023-06-01`（`POST /v1/messages`）。自定义基础 URL 保留这些请求头，发到 Anthropic 兼容网关。
@@ -58,7 +58,7 @@ https://github.com/YyyQq-C/hass-smart-llm
 
 ### 更新
 
-已经装过的实例要换成已发布的版本时，在 HACS 里更新即可。自定义仓库和已有的 Smart LLM 配置项都保留。当前代码里的清单版本是 `1.2.0`。GitHub Release 另行发布。
+已经装过的实例要换成已发布的版本时，在 HACS 里更新即可。自定义仓库和已有的 Smart LLM 配置项都保留。当前代码里的清单版本是 `1.3.0`。GitHub Release 另行发布。
 
 1. 打开 HACS → 集成 → **Smart LLM**。
 2. HACS 提示有新版本时，选择 **Update**（更新）。若要重新拉取当前版本，打开菜单并选择 **Redownload**（重新下载）。
@@ -81,10 +81,10 @@ config/custom_components/smart_llm/manifest.json
 1. 打开「设置 → 设备与服务 → 添加集成 → **Smart LLM**」。
 2. 选择 **Cursor**。
 3. 打开登录网址，并在 Cursor 门户里批准。校验码留在 Home Assistant 上，不会出现在网址里。
-4. 提交。Home Assistant 会轮询到登录完成，然后签发名为 `Home Assistant Smart LLM` 的用户 API 密钥（90 天）。
+4. 选择密钥有效期：30、90（默认）、180、365 天，或永久。提交。Home Assistant 会轮询到登录完成，然后签发名为 `Home Assistant Smart LLM` 的用户 API 密钥。有限期会把 `expiresAt` 发给 Cursor。永久会省略这个字段，这是 Cursor 签发不过期密钥的方式。
 5. 确认你了解 Cursor Bridge 是非官方服务，再选择模型。`default` 表示交给 Cursor 选择。
 
-浏览器会话令牌在签发后即丢弃。Home Assistant 只保存 API 密钥，并用本机实例 ID（`.storage/core.uuid`）派生的密钥加密。诊断信息和实体属性里只有掩码，例如 `crsr_••••••••wxyz`。
+浏览器会话令牌在签发后即丢弃。Home Assistant 用本机实例 ID（`.storage/core.uuid`）派生的密钥加密保存 API 密钥，并把你选择的到期时间（或永不过期）写在配置项上。诊断信息和实体属性里只有掩码，例如 `crsr_••••••••wxyz`。到期时间不是机密。
 
 如果团队策略禁止用户 API 密钥，登录可能成功，但签发仍会失败。需要团队管理员放开该权限。
 
@@ -104,7 +104,11 @@ config/custom_components/smart_llm/manifest.json
 
 选项界面里的账号显示为 `y**@g**.com` 这种掩码，不会出现完整邮箱。语音助手卡片和集成标题保持为 **Cursor**。
 
-退出登录会从 Home Assistant 删除密钥。这把密钥在 Cursor 控制台里仍然有效，直到过期或你在那里撤销。之后需要重新授权，Assist 才能继续使用这个代理。切换账号会先退出，再使用与首次安装相同的浏览器登录。重新授权仍然要求是同一个 Cursor 账号。
+退出登录会从 Home Assistant 删除密钥。这把密钥在 Cursor 控制台里仍然有效，直到过期或你在那里撤销。之后需要重新授权，Assist 才能继续使用这个代理。切换账号会先退出，再使用与首次安装相同的浏览器登录，也包括有效期选择。重新授权仍然要求是同一个 Cursor 账号，并会再次询问有效期。
+
+### 密钥到期
+
+有限期的密钥会在条目运行期间被检查。大约在保存的到期时间前 7 天，Home Assistant 会发出一条修复问题和一条持久通知。密钥到期后，这条提示会更新，Assist 会回复需要重新授权，额度传感器变为不可用。可以使用修复流程，或打开集成选项并选择重新授权。同一次提示不会在每次刷新时重复发出。永久密钥没有到期提醒。更早创建、没有保存到期时间的条目不会被当成已过期。
 
 ## OpenAI 兼容与 Anthropic 兼容
 
@@ -231,7 +235,7 @@ Cursor Bridge 没有公开的配额接口。它文档里的路由是 chat comple
 
 ## 扩展提供方
 
-1.2.0 注册了三个客户端：Cursor、OpenAI 兼容客户端（菜单名称 **OpenAI**）、Anthropic 兼容客户端（菜单名称 **Anthropic**）。接口符合其中一种协议的服务，使用对应的客户端。官方模式调用该协议的公有云。自定义基础 URL 保留同一套请求风格，调用你填写的主机。OpenAI 兼容的自定义基础 URL 可以不填 API 密钥。另一种协议需要实现 `custom_components/smart_llm/provider/base.py` 里的 `ChatProvider`，在 `provider/registry.py` 注册，并在配置流里加上自己的步骤。Cursor 继续使用浏览器登录。
+Smart LLM 注册了三个客户端：Cursor、OpenAI 兼容客户端（菜单名称 **OpenAI**）、Anthropic 兼容客户端（菜单名称 **Anthropic**）。接口符合其中一种协议的服务，使用对应的客户端。官方模式调用该协议的公有云。自定义基础 URL 保留同一套请求风格，调用你填写的主机。OpenAI 兼容的自定义基础 URL 可以不填 API 密钥。另一种协议需要实现 `custom_components/smart_llm/provider/base.py` 里的 `ChatProvider`，在 `provider/registry.py` 注册，并在配置流里加上自己的步骤。Cursor 继续使用浏览器登录。
 
 ## 许可
 

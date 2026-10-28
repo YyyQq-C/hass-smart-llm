@@ -32,6 +32,8 @@ CONF_PROVIDER = "provider"
 CONF_API_KEY = "api_key"
 CONF_API_KEY_ENCRYPTED = "api_key_encrypted"
 CONF_API_KEY_EXPIRES_AT = "api_key_expires_at"
+# Named lifetime chosen at mint: "30", "90", "180", "365", or "never".
+CONF_API_KEY_TTL = "api_key_ttl"
 CONF_EMAIL = "email"
 CONF_BRIDGE_BASE_URL = "bridge_base_url"
 CONF_BASE_URL = "base_url"
@@ -71,8 +73,18 @@ DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5"
 ANTHROPIC_VERSION = "2023-06-01"
 ANTHROPIC_MAX_TOKENS = 4096
 
-# The SDK mints a key that expires after 90 days.
+# SDK login defaults to 90 days (`apiKeyTtlMs` / `DEFAULT_LOGIN_API_KEY_TTL_MS`).
+# CreateUserApiKey's optional `expires_at` is omitted for a key that never expires.
 API_KEY_TTL_MS = 90 * 24 * 60 * 60 * 1000
+API_KEY_TTL_NEVER = "never"
+API_KEY_TTL_DEFAULT = "90"
+API_KEY_TTL_DAY_CHOICES = ("30", "90", "180", "365")
+API_KEY_TTL_CHOICES = API_KEY_TTL_DAY_CHOICES + (API_KEY_TTL_NEVER,)
+API_KEY_TTL_DAYS = {choice: int(choice) for choice in API_KEY_TTL_DAY_CHOICES}
+# Warn this long before a stored expiry, then again once the key has expired.
+API_KEY_EXPIRY_LEAD_MS = 7 * 24 * 60 * 60 * 1000
+# How often a running entry rechecks that lead window.
+CURSOR_EXPIRY_CHECK_MINUTES = 60
 API_KEY_NAME = "Home Assistant Smart LLM"
 
 # Poll budget matches the SDK: ~20 minutes with backoff from 1s to 10s.

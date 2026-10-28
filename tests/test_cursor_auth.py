@@ -6,6 +6,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import time
 from urllib.parse import parse_qs, urlsplit
 
 from aiohttp import ClientSession, web
@@ -288,6 +289,153 @@ def test_mint_reports_a_safe_error_when_the_key_is_empty() -> None:
                     assert "access-token" not in str(err)
                 else:
                     raise AssertionError("expected mint failure")
+
+    asyncio.run(scenario())
+
+
+def test_mint_omits_expires_at_for_a_permanent_key() -> None:
+    """CreateUserApiKey treats a missing expiresAt as a key that never expires."""
+
+    async def scenario() -> None:
+        seen: list[dict] = []
+
+        async def create_key(request: web.Request) -> web.Response:
+            seen.append(await request.json())
+            return web.json_response({"apiKey": "crsr_permanent_key_value"})
+
+        async def get_me(_request: web.Request) -> web.Response:
+            return web.json_response({"email": "ada@example.com"})
+
+        app = web.Application()
+        app.router.add_post(
+            "/aiserver.v1.DashboardService/CreateUserApiKey", create_key
+        )
+        app.router.add_post("/aiserver.v1.DashboardService/GetMe", get_me)
+        async with _server(app) as base:
+            async with ClientSession() as session:
+                result = await mint_user_api_key(
+                    session,
+                    api_base_url=base,
+                    access_token="access-token",
+                    name=API_KEY_NAME,
+                    expires_at_ms=None,
+                    ttl="never",
+                )
+
+        assert result.api_key == "crsr_permanent_key_value"
+        assert result.expires_at_ms is None
+        assert result.ttl == "never"
+        assert seen[0] == {"name": API_KEY_NAME}
+        assert "expiresAt" not in seen[0]
+
+    asyncio.run(scenario())
+
+
+def test_login_and_mint_permanent_choice_omits_expiry() -> None:
+    async def scenario() -> None:
+        seen: list[dict] = []
+
+        async def poll(_request: web.Request) -> web.Response:
+            return web.json_response(
+                {"accessToken": "access-token", "refreshToken": "refresh-token"}
+            )
+
+        async def create_key(request: web.Request) -> web.Response:
+            seen.append(await request.json())
+            return web.json_response({"apiKey": "crsr_permanent_key_value"})
+
+        async def get_me(_request: web.Request) -> web.Response:
+            return web.json_response({})
+
+        app = web.Application()
+        app.router.add_post("/auth/poll", poll)
+        app.router.add_post(
+            "/aiserver.v1.DashboardService/CreateUserApiKey", create_key
+        )
+        app.router.add_post("/aiserver.v1.DashboardService/GetMe", get_me)
+        handshake = create_login_handshake()
+        async with _server(app) as base:
+            async with ClientSession() as session:
+                result = await async_login_and_mint(
+                    session,
+                    handshake,
+                    api_base_url=base,
+                    ttl="never",
+                    max_attempts=2,
+                    base_delay_ms=0,
+                    max_delay_ms=0,
+                )
+        assert result.ttl == "never"
+        assert result.expires_at_ms is None
+        assert "expiresAt" not in seen[0]
+
+    asyncio.run(scenario())
+
+
+def test_login_and_mint_named_lifetime_sends_expires_at() -> None:
+    async def scenario() -> None:
+        seen: list[dict] = []
+
+        async def poll(_request: web.Request) -> web.Response:
+            return web.json_response(
+                {"accessToken": "access-token", "refreshToken": "refresh-token"}
+            )
+
+        async def create_key(request: web.Request) -> web.Response:
+            seen.append(await request.json())
+            return web.json_response({"apiKey": "crsr_thirty_day_key"})
+
+        async def get_me(_request: web.Request) -> web.Response:
+            return web.Response(status=404, text="no")
+
+        app = web.Application()
+        app.router.add_post("/auth/poll", poll)
+        app.router.add_post(
+            "/aiserver.v1.DashboardService/CreateUserApiKey", create_key
+        )
+        app.router.add_post("/aiserver.v1.DashboardService/GetMe", get_me)
+        handshake = create_login_handshake()
+        before = int(time.time() * 1000)
+        async with _server(app) as base:
+            async with ClientSession() as session:
+                result = await async_login_and_mint(
+                    session,
+                    handshake,
+                    api_base_url=base,
+                    ttl="30",
+                    max_attempts=2,
+                    base_delay_ms=0,
+                    max_delay_ms=0,
+                )
+        after = int(time.time() * 1000)
+        thirty_days = 30 * 24 * 60 * 60 * 1000
+        assert result.ttl == "30"
+        assert result.expires_at_ms is not None
+        assert before + thirty_days <= result.expires_at_ms <= after + thirty_days
+        assert seen[0]["expiresAt"] == str(result.expires_at_ms)
+
+    asyncio.run(scenario())
+
+
+def test_login_and_mint_rejects_a_non_positive_or_unknown_lifetime() -> None:
+    async def scenario() -> None:
+        handshake = create_login_handshake()
+        async with ClientSession() as session:
+            for kwargs in ({"ttl_ms": 0}, {"ttl_ms": -1}, {"ttl": "forever"}):
+                try:
+                    await async_login_and_mint(
+                        session,
+                        handshake,
+                        api_base_url="http://127.0.0.1:9",
+                        max_attempts=1,
+                        base_delay_ms=0,
+                        max_delay_ms=0,
+                        **kwargs,
+                    )
+                except CursorLoginError as err:
+                    assert err.code == "unknown"
+                else:
+                    raise AssertionError(f"expected login error for {kwargs}")
 
     asyncio.run(scenario())
 

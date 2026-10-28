@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from .const import (
@@ -11,6 +12,7 @@ from .const import (
     CONF_CONNECTION_MODE,
     CONF_EMAIL,
     CONF_PROVIDER,
+    CURSOR_EXPIRY_CHECK_MINUTES,
     PROVIDER_CURSOR,
 )
 from .crypto import DecryptionError, mask_secret
@@ -48,6 +50,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
     provider_id = entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
+    if provider_id == PROVIDER_CURSOR:
+        from .expiry_notice import async_sync_cursor_key_notice
+
+        await async_sync_cursor_key_notice(hass, entry)
     visible_title = public_title(entry.title)
     if entry.title != visible_title:
         hass.config_entries.async_update_entry(entry, title=visible_title)
@@ -104,6 +110,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         platforms=platforms,
     )
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+    if provider_id == PROVIDER_CURSOR and encrypted:
+        from homeassistant.helpers.event import async_track_time_interval
+
+        from .expiry_notice import async_sync_cursor_key_notice
+
+        async def _async_check_key_expiry(_now: object) -> None:
+            await async_sync_cursor_key_notice(hass, entry)
+
+        entry.async_on_unload(
+            async_track_time_interval(
+                hass,
+                _async_check_key_expiry,
+                timedelta(minutes=CURSOR_EXPIRY_CHECK_MINUTES),
+            )
+        )
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
     _LOGGER.info("Smart LLM is ready (provider=%s)", provider_id)
     return True
@@ -117,6 +138,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not platforms:
         platforms = (Platform.CONVERSATION, Platform.SENSOR)
     return await hass.config_entries.async_unload_platforms(entry, platforms)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Drop the expiry notice when the config entry is deleted."""
+    from .expiry_notice import async_clear_cursor_key_notice
+
+    if entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR) == PROVIDER_CURSOR:
+        await async_clear_cursor_key_notice(hass, entry.entry_id)
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
