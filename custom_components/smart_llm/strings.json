@@ -13,7 +13,7 @@
       },
       "cursor_link": {
         "title": "Authorize Cursor",
-        "description": "Open this URL and approve access for Smart LLM. The login verifier stays on this Home Assistant instance and is not part of the URL.\n\n{login_url}\n\nAfter you approve, submit to wait for Cursor.",
+        "description": "Open this URL and approve access for Smart LLM ({account}). The login verifier stays on this Home Assistant instance and is not part of the URL.\n\n{login_url}\n\nAfter you approve, submit to wait for Cursor.",
         "data": {
           "login_url": "Login URL"
         },
@@ -35,7 +35,7 @@
           "acknowledge_bridge": "I understand Cursor Bridge is unofficial"
         },
         "data_description": {
-          "bridge_base_url": "OpenAI-compatible base URL. The default is https://cursorbridge.dev/v1.",
+          "bridge_base_url": "OpenAI-compatible base URL. The suggested value is the community Cursor Bridge endpoint.",
           "model": "Model id from Cursor Bridge. Use default to let Cursor choose.",
           "llm_hass_api": "Optional. Exposes the selected Home Assistant tools to the model.",
           "prompt": "Added after the built-in Assist prompt.",
@@ -74,12 +74,14 @@
           "settings": "Model and Bridge URL",
           "refresh_models": "Refresh models",
           "reauth": "Re-authorize",
+          "switch_account": "Switch account",
           "logout": "Log out"
         },
         "menu_option_descriptions": {
           "settings": "Choose the model, Cursor Bridge URL, Assist tools, and extra instructions.",
           "refresh_models": "Call GET /v1/models on the configured Cursor Bridge URL.",
-          "reauth": "Open the Cursor login page and mint a new API key.",
+          "reauth": "Open the Cursor login page and mint a new API key for this account.",
+          "switch_account": "Sign out and link a different Cursor account.",
           "logout": "Remove the stored API key from Home Assistant."
         }
       },
@@ -93,7 +95,7 @@
           "prompt": "Extra instructions"
         },
         "data_description": {
-          "bridge_base_url": "OpenAI-compatible base URL. The default is https://cursorbridge.dev/v1.",
+          "bridge_base_url": "OpenAI-compatible base URL. The suggested value is the community Cursor Bridge endpoint.",
           "model": "Model id from Cursor Bridge. Use default to let Cursor choose.",
           "llm_hass_api": "Optional. Exposes the selected Home Assistant tools to the model.",
           "prompt": "Added after the built-in Assist prompt. Leave empty to remove extra instructions."
@@ -104,7 +106,7 @@
       },
       "cursor_link": {
         "title": "Re-authorize Cursor",
-        "description": "Open this URL and approve access. The previous key is replaced only after a new key is minted.\n\n{login_url}",
+        "description": "Account: {account}. Open this URL and approve access. The previous key is replaced only after a new key is minted.\n\n{login_url}",
         "data": {
           "login_url": "Login URL"
         },
@@ -115,9 +117,23 @@
       "cursor_poll": {
         "title": "Waiting for Cursor"
       },
+      "switch_account": {
+        "title": "Switch account",
+        "description": "This signs out {account} ({masked_key}) and starts Cursor login so a different account can be linked. The stored API key is removed now. The key remains valid in the Cursor dashboard until it expires or you revoke it there."
+      },
+      "switch_link": {
+        "title": "Link another Cursor account",
+        "description": "The previous account ({account}) has been signed out. Open this URL and approve access with the Cursor account you want to link.\n\n{login_url}\n\nA new API key is stored only after login succeeds, and the model list is refreshed.",
+        "data": {
+          "login_url": "Login URL"
+        },
+        "data_description": {
+          "login_url": "Copy this if the link above is hard to select. Editing it has no effect."
+        }
+      },
       "logout": {
         "title": "Log out",
-        "description": "This removes the stored API key for {account} ({masked_key}) from Home Assistant. The key remains valid in the Cursor dashboard until it expires or you revoke it there."
+        "description": "This removes the stored API key for {account} ({masked_key}) from Home Assistant. Assist will ask you to sign in again. The key remains valid in the Cursor dashboard until it expires or you revoke it there."
       }
     },
     "progress": {
@@ -141,6 +157,7 @@
       "cancelled": "Authorization was cancelled.",
       "wrong_account": "That Cursor account does not match this integration entry.",
       "logged_out": "Logged out. Re-authorize before Assist can use Smart LLM again.",
+      "switch_successful": "Switched Cursor accounts. The new API key is stored.",
       "unknown": "Authorization could not be saved."
     }
   }

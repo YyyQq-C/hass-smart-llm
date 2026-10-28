@@ -16,6 +16,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    AGENT_NAME,
     CONF_BRIDGE_BASE_URL,
     CONF_MODEL,
     CONF_PROVIDER,
@@ -69,12 +70,14 @@ class SmartLLMConversationEntity(conversation.ConversationEntity):
     def __init__(self, entry: ConfigEntry) -> None:
         """Initialize the agent from a config entry."""
         self._entry = entry
-        self._attr_name = entry.title or "Smart LLM"
+        # The Assist card uses this name. Older entry titles embedded the
+        # Cursor email, so the visible name is always the generic label.
+        self._attr_name = AGENT_NAME
         self._attr_unique_id = entry.entry_id
         provider = entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title or "Smart LLM",
+            name=AGENT_NAME,
             manufacturer="Smart LLM",
             model="Cursor" if provider == PROVIDER_CURSOR else provider,
             configuration_url="https://cursor.com/dashboard",

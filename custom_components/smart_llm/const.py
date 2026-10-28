@@ -6,6 +6,13 @@ DOMAIN = "smart_llm"
 
 PROVIDER_CURSOR = "cursor"
 
+# Assist entity, device, and config-entry title. Never include an email address.
+AGENT_NAME = "Cursor"
+
+# Entry ids whose options flow is signing out to link a different Cursor account.
+# Setup must not start a competing reauth flow while this set contains the entry.
+DATA_SWITCH_IN_PROGRESS = "smart_llm_switch_in_progress"
+
 CONF_PROVIDER = "provider"
 CONF_API_KEY_ENCRYPTED = "api_key_encrypted"
 CONF_API_KEY_EXPIRES_AT = "api_key_expires_at"

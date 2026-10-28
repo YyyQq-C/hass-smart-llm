@@ -15,6 +15,7 @@ from .const import (
     PROVIDER_CURSOR,
 )
 from .crypto import DecryptionError, mask_secret
+from .identity import account_switch_in_progress, display_account, public_title
 from .provider.base import ChatProvider
 from .provider.registry import create_chat_provider
 from .secrets import async_decrypt
@@ -32,7 +33,7 @@ class SmartLLMRuntime:
 
     provider: ChatProvider
     masked_key: str
-    email: str | None
+    email: str | None  # masked for display; never the full address
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -42,8 +43,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
     provider_id = entry.data.get(CONF_PROVIDER, PROVIDER_CURSOR)
+    visible_title = public_title(entry.title)
+    if entry.title != visible_title:
+        hass.config_entries.async_update_entry(entry, title=visible_title)
+
     encrypted = entry.data.get(CONF_API_KEY_ENCRYPTED)
     if not encrypted:
+        if account_switch_in_progress(hass.data, entry.entry_id):
+            _LOGGER.info("Smart LLM is waiting for another Cursor account")
+            return False
         raise ConfigEntryAuthFailed("Cursor authorization required")
 
     try:
@@ -64,10 +72,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except ValueError as err:
         raise ConfigEntryError("Invalid Cursor Bridge URL") from err
 
+    stored_email = entry.data.get(CONF_EMAIL)
     entry.runtime_data = SmartLLMRuntime(
         provider=provider,
         masked_key=mask_secret(api_key),
-        email=entry.data.get(CONF_EMAIL),
+        email=display_account(stored_email) if stored_email else None,
     )
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(
