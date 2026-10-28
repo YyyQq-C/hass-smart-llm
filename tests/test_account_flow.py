@@ -218,3 +218,5 @@ def test_translation_catalogs_offer_logout_and_switch_without_a_raw_email() -> N
         encoded = json.dumps(blob)
         assert _EMAIL not in encoded
         assert "@gmail.com" not in encoded
+        assert "https://" not in encoded
+        assert "http://" not in encoded

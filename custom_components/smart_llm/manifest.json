@@ -2,6 +2,7 @@
   "domain": "smart_llm",
   "name": "Smart LLM",
   "after_dependencies": ["assist_pipeline"],
+  "categories": ["ai_voice.voice_assistants"],
   "codeowners": ["@YyyQq-C"],
   "config_flow": true,
   "dependencies": ["conversation"],

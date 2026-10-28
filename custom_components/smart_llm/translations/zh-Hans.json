@@ -35,7 +35,7 @@
           "acknowledge_bridge": "我了解 Cursor Bridge 是非官方服务"
         },
         "data_description": {
-          "bridge_base_url": "OpenAI 兼容的基础 URL。默认是 https://cursorbridge.dev/v1。",
+          "bridge_base_url": "OpenAI 兼容的基础 URL。建议值是社区版 Cursor Bridge 端点。",
           "model": "Cursor Bridge 上的模型 id。填 default 时由 Cursor 选择。",
           "llm_hass_api": "可选。把所选的 Home Assistant 工具提供给模型。",
           "prompt": "加在 Assist 内置提示词之后。",
@@ -95,7 +95,7 @@
           "prompt": "补充说明"
         },
         "data_description": {
-          "bridge_base_url": "OpenAI 兼容的基础 URL。默认是 https://cursorbridge.dev/v1。",
+          "bridge_base_url": "OpenAI 兼容的基础 URL。建议值是社区版 Cursor Bridge 端点。",
           "model": "Cursor Bridge 上的模型 id。填 default 时由 Cursor 选择。",
           "llm_hass_api": "可选。把所选的 Home Assistant 工具提供给模型。",
           "prompt": "加在 Assist 内置提示词之后。留空可清除补充说明。"

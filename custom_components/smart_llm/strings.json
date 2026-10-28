@@ -35,7 +35,7 @@
           "acknowledge_bridge": "I understand Cursor Bridge is unofficial"
         },
         "data_description": {
-          "bridge_base_url": "OpenAI-compatible base URL. The default is https://cursorbridge.dev/v1.",
+          "bridge_base_url": "OpenAI-compatible base URL. The suggested value is the community Cursor Bridge endpoint.",
           "model": "Model id from Cursor Bridge. Use default to let Cursor choose.",
           "llm_hass_api": "Optional. Exposes the selected Home Assistant tools to the model.",
           "prompt": "Added after the built-in Assist prompt.",
@@ -95,7 +95,7 @@
           "prompt": "Extra instructions"
         },
         "data_description": {
-          "bridge_base_url": "OpenAI-compatible base URL. The default is https://cursorbridge.dev/v1.",
+          "bridge_base_url": "OpenAI-compatible base URL. The suggested value is the community Cursor Bridge endpoint.",
           "model": "Model id from Cursor Bridge. Use default to let Cursor choose.",
           "llm_hass_api": "Optional. Exposes the selected Home Assistant tools to the model.",
           "prompt": "Added after the built-in Assist prompt. Leave empty to remove extra instructions."
