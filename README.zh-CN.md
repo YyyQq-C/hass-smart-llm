@@ -1,3 +1,5 @@
+<div align="center">
+
 [English](README.md) | [中文](README.zh-CN.md)
 
 # Smart LLM
@@ -9,7 +11,9 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.1%2B-41BDF5)](https://www.home-assistant.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Home Assistant Assist 的可插拔对话代理。1.2.0 有三条路径。每条路径各自有一个对话实体，在「设置 → 语音助手」里选用。
+</div>
+
+Home Assistant Assist 的可插拔对话代理。三条路径各自有一个对话实体，在「设置 → 语音助手」里选用。
 
 - **Cursor** 使用浏览器登录和 [Cursor Bridge](https://cursorbridge.dev)。Cursor 条目还会在 Cursor 返回当前计费周期时添加额度传感器。
 - 菜单里的 **OpenAI** 是 OpenAI 兼容协议：chat completions，有密钥时发送 `Authorization: Bearer`。官方模式调用 OpenAI，并且必须有密钥。自定义基础 URL 把同一套请求发到任何实现了该 API 的主机，包括 Azure OpenAI、OpenRouter、Ollama、vLLM、LM Studio 和 LocalAI。自定义 URL 上的密钥可以不填。密钥为空时不发送 `Authorization`。
@@ -17,7 +21,7 @@ Home Assistant Assist 的可插拔对话代理。1.2.0 有三条路径。每条�
 
 菜单仍使用 OpenAI 和 Anthropic 这两个名字，因为它们表示的是协议。其他厂商只要接口符合其中一种风格，就可以选对应的菜单项。没有单独的 Ollama 协议。
 
-集成域名是 `smart_llm`。集成清单里的版本是 `1.2.0`。v1.2.0 允许 OpenAI 兼容的自定义基础 URL 不填 API 密钥，并把 Cursor 的当前计费周期读成传感器。没有增加新的对话协议。
+集成域名是 `smart_llm`。
 
 ## 功能
 
@@ -121,7 +125,7 @@ v1.1.0 用两种兼容风格发送 API 密钥。许多厂商实现了其中一�
 | OpenAI 兼容（**OpenAI**） | 向 `https://api.openai.com/v1` 发送 `Authorization: Bearer`（在该基础地址上 `GET /models`、`POST /chat/completions`）。必须有密钥 | 同样的 chat completions 请求，发到你的主机：Azure OpenAI、OpenRouter、Ollama、vLLM、LM Studio、LocalAI，或其他 OpenAI 兼容服务。密钥可以不填。为空时不发送 `Authorization` |
 | Anthropic 兼容（**Anthropic**） | 向 `https://api.anthropic.com` 发送 `x-api-key` 和 `anthropic-version: 2023-06-01`（`GET /v1/models`、`POST /v1/messages`） | 同样的 `x-api-key`、`anthropic-version` 请求头和 Messages 请求，发到 Anthropic 兼容网关 |
 
-自定义 URL 必须是 `http` 或 `https`，且不能带用户名或密码。OpenAI 兼容地址会被规范成以 `/v1` 结尾（`https://openrouter.ai/api/v1/chat/completions` 会变成 `https://openrouter.ai/api/v1`）。本地的 `http://…/v1` 会保留 `http`。Anthropic 兼容地址填写主机即可；末尾的 `/v1` 或 `/v1/messages` 可以保留，实际请求仍是 `POST /v1/messages`。
+自定义 URL 必须是 `http` 或 `https`，且不能带用户名或密码。OpenAI 兼容地址会去掉末尾的 `/chat/completions` 或 `/models`。没有路径的主机会补上 `/v1`（`https://openrouter.ai/api/v1/chat/completions` 会变成 `https://openrouter.ai/api/v1`；`https://api.deepseek.com` 会变成 `https://api.deepseek.com/v1`）。更长的路径会保留，包括 `https://open.bigmodel.cn/api/paas/v4` 和 `https://dashscope.aliyuncs.com/compatible-mode/v1`。本地的 `http://…/v1` 会保留 `http`。Anthropic 兼容地址填写主机即可；末尾的 `/v1` 或 `/v1/messages` 可以保留，实际请求仍是 `POST /v1/messages`。
 
 ### 本地服务（Ollama、vLLM 以及其他）
 
@@ -145,6 +149,25 @@ Ollama、vLLM、LM Studio 和 LocalAI 说的是 OpenAI 对话 API。请用 **Ope
 跑在 Docker 里的 Home Assistant 不能用 `localhost` 访问宿主机上的服务。容器里的 `localhost` 是容器自己。请用宿主机的局域网地址，例如 `http://192.168.1.20:11434/v1`；如果 `host.docker.internal` 能解析到宿主机（Docker Desktop 可以），也可以用 `http://host.docker.internal:11434/v1`。Linux 上的 Docker 只有在启动容器时做了这个主机映射，`host.docker.internal` 才存在。
 
 官方 OpenAI 端点仍然拒绝空密钥。空密钥只在 OpenAI 兼容的自定义基础 URL 上可用。
+
+### 云厂商（OpenAI 兼容）
+
+这些主机说的是 OpenAI 对话 API。在菜单里选择 **OpenAI**，粘贴该厂商的 API 密钥，选择 **自定义基础 URL**，再填入下面的地址。这些云 API 必须有密钥。只有不校验密钥的本地服务才把密钥留空。
+
+| 厂商 | Base URL（OpenAI 兼容） | 示例模型 |
+| --- | --- | --- |
+| 阿里云百炼 / 通义千问（北京） | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus`, `qwen-max` |
+| Moonshot Kimi（中国） | `https://api.moonshot.cn/v1` | `kimi-k3`, `kimi-k2.6` |
+| Moonshot Kimi（国际） | `https://api.moonshot.ai/v1` | `kimi-k3`, `kimi-k2.6` |
+| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4/` | `glm-5.3`, `glm-4.7-flash` |
+| DeepSeek | `https://api.deepseek.com`（`https://api.deepseek.com/v1` 也可以） | `deepseek-flash`, `deepseek-v4-pro` |
+
+- 百炼的密钥按地域分开，不能跨地域使用。上面这一行是北京共享域名，要配北京的密钥。新加坡用 `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`。美国（弗吉尼亚）用 `https://dashscope-us.aliyuncs.com/compatible-mode/v1`。
+- Moonshot 中国站（`api.moonshot.cn`，密钥来自 [platform.kimi.com](https://platform.kimi.com)）和国际站（`api.moonshot.ai`，密钥来自 [platform.kimi.ai](https://platform.kimi.ai)）是同一套模型。两个平台的密钥不能互换。
+- 智谱当前的 OpenAI 兼容对话文档使用 `glm-5.3` 和 `glm-4.7-flash`。DeepSeek 当前文档使用 `deepseek-flash` 和 `deepseek-v4-pro`。上面两个 DeepSeek 地址都可以；没有路径的地址保存时会补上 `/v1`。
+- 基础 URL 和模型 ID 会变。以厂商文档为准，不要只靠这张表里的名字。
+- 说 Anthropic Messages API 的网关留在 **Anthropic** 菜单。这包括厂商自己的 Anthropic 兼容地址，例如百炼的 `/apps/anthropic`、Kimi 的 `/anthropic`，或 `https://api.deepseek.com/anthropic`。
+- 跑在 Docker 里的 Home Assistant，以及用 `localhost` 访问宿主机上的服务，见上面的「本地服务」。这些云地址是公网 HTTPS 端点。
 
 ### 选项
 

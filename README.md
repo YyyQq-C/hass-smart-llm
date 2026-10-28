@@ -1,3 +1,5 @@
+<div align="center">
+
 [English](README.md) | [中文](README.zh-CN.md)
 
 # Smart LLM
@@ -9,7 +11,9 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.1%2B-41BDF5)](https://www.home-assistant.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Pluggable conversation agent for Home Assistant Assist. Version 1.2.0 has three paths. Each path is its own conversation entity under Settings → Voice assistants.
+</div>
+
+Pluggable conversation agent for Home Assistant Assist. Three paths each become their own conversation entity under Settings → Voice assistants.
 
 - **Cursor** uses browser login and [Cursor Bridge](https://cursorbridge.dev). A Cursor entry also adds allowance sensors when Cursor returns the current billing period.
 - **OpenAI** in the menu is the OpenAI-compatible protocol: chat completions, and `Authorization: Bearer` when a key is set. Official mode calls OpenAI and requires a key. A custom base URL sends that same request to any host that speaks the API, including Azure OpenAI, OpenRouter, Ollama, vLLM, LM Studio, and LocalAI. The key is optional on that custom URL. An empty key omits `Authorization`.
@@ -17,7 +21,7 @@ Pluggable conversation agent for Home Assistant Assist. Version 1.2.0 has three 
 
 The menu keeps the names OpenAI and Anthropic because those names are the protocols. Another vendor works on that menu choice when its API speaks the same style. There is no separate Ollama protocol.
 
-The domain is `smart_llm`. The integration manifest version is `1.2.0`. v1.2.0 lets an OpenAI-compatible custom base URL omit the API key, and it reads Cursor's current billing period into sensors. It does not add a new chat protocol.
+The domain is `smart_llm`.
 
 ## Features
 
@@ -121,7 +125,7 @@ v1.1.0 sends API keys with one of two compatible styles. Many vendors speak one 
 | OpenAI-compatible (**OpenAI**) | `Authorization: Bearer` against `https://api.openai.com/v1` (`GET /models`, `POST /chat/completions` on that base). A key is required | The same chat-completions request, sent to your host: Azure OpenAI, OpenRouter, Ollama, vLLM, LM Studio, LocalAI, or any other OpenAI-compatible service. The key is optional. When it is empty, `Authorization` is omitted |
 | Anthropic-compatible (**Anthropic**) | `x-api-key` and `anthropic-version: 2023-06-01` against `https://api.anthropic.com` (`GET /v1/models`, `POST /v1/messages`) | The same `x-api-key` and `anthropic-version` headers and Messages request, sent to an Anthropic-compatible gateway |
 
-A custom URL must be `http` or `https` and must not include a username or password. An OpenAI-compatible paste is normalized so the base ends at `/v1` (`https://openrouter.ai/api/v1/chat/completions` becomes `https://openrouter.ai/api/v1`). A local `http://…/v1` base keeps `http`. An Anthropic-compatible paste is the host; a trailing `/v1` or `/v1/messages` is accepted and requests are still `POST /v1/messages`.
+A custom URL must be `http` or `https` and must not include a username or password. An OpenAI-compatible paste drops a trailing `/chat/completions` or `/models`. A host with no path gets `/v1` (`https://openrouter.ai/api/v1/chat/completions` becomes `https://openrouter.ai/api/v1`; `https://api.deepseek.com` becomes `https://api.deepseek.com/v1`). A longer path is kept, including `https://open.bigmodel.cn/api/paas/v4` and `https://dashscope.aliyuncs.com/compatible-mode/v1`. A local `http://…/v1` base keeps `http`. An Anthropic-compatible paste is the host; a trailing `/v1` or `/v1/messages` is accepted and requests are still `POST /v1/messages`.
 
 ### Local servers (Ollama, vLLM, and others)
 
@@ -145,6 +149,25 @@ Ollama, vLLM, LM Studio, and LocalAI speak the OpenAI chat API. Use the **OpenAI
 Home Assistant in Docker does not see a server on the host through `localhost`. Inside the container, `localhost` is the container. Use the host's LAN address, such as `http://192.168.1.20:11434/v1`, or `http://host.docker.internal:11434/v1` when that name resolves to the host (Docker Desktop does this). On Linux Docker, `host.docker.internal` exists only if the container is started with that host mapping.
 
 The official OpenAI endpoint still rejects an empty key. An empty key is accepted only for an OpenAI-compatible custom base URL.
+
+### Cloud vendors (OpenAI-compatible)
+
+These hosts speak the OpenAI chat API. Choose **OpenAI** in the menu, paste that vendor's API key, choose **Custom base URL**, and enter the base. These cloud APIs require a key. Leave the key empty only for a local server that does not check one.
+
+| Vendor | Base URL (OpenAI-compatible) | Example models |
+| --- | --- | --- |
+| Alibaba Cloud Model Studio / Qwen (Beijing) | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus`, `qwen-max` |
+| Moonshot Kimi (China) | `https://api.moonshot.cn/v1` | `kimi-k3`, `kimi-k2.6` |
+| Moonshot Kimi (International) | `https://api.moonshot.ai/v1` | `kimi-k3`, `kimi-k2.6` |
+| Zhipu GLM | `https://open.bigmodel.cn/api/paas/v4/` | `glm-5.3`, `glm-4.7-flash` |
+| DeepSeek | `https://api.deepseek.com` (`https://api.deepseek.com/v1` is also accepted) | `deepseek-flash`, `deepseek-v4-pro` |
+
+- DashScope keys are regional and do not work across regions. The Beijing row is the shared domain and needs a Beijing key. Singapore uses `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`. US (Virginia) uses `https://dashscope-us.aliyuncs.com/compatible-mode/v1`.
+- Moonshot China (`api.moonshot.cn`, keys from [platform.kimi.com](https://platform.kimi.com)) and Moonshot International (`api.moonshot.ai`, keys from [platform.kimi.ai](https://platform.kimi.ai)) use the same model family. Keys from the two platforms are not interchangeable.
+- Zhipu's current OpenAI-compatible chat docs use `glm-5.3` and `glm-4.7-flash`. DeepSeek's current docs use `deepseek-flash` and `deepseek-v4-pro`. Both DeepSeek bases above work; a paste with no path is stored with `/v1` appended.
+- Base URLs and model ids change. Check the vendor's docs before relying on a name in this table.
+- A gateway that speaks the Anthropic Messages API stays on the **Anthropic** menu. That includes a vendor's Anthropic-compatible base, such as DashScope `/apps/anthropic`, Kimi `/anthropic`, or `https://api.deepseek.com/anthropic`.
+- Home Assistant in Docker, and `localhost` for a server on the host, are covered under [Local servers](#local-servers-ollama-vllm-and-others). These cloud URLs are public HTTPS endpoints.
 
 ### Options
 
