@@ -5,11 +5,11 @@
 ![Smart LLM](images/icon.png)
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![Release](https://img.shields.io/github/v/release/YyyQq-C/hass-smart-llm?label=release)](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.0)
+[![Release](https://img.shields.io/github/v/release/YyyQq-C/hass-smart-llm?label=release)](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.1)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.1%2B-41BDF5)](https://www.home-assistant.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Home Assistant Assist 的可插拔对话代理。当前版本 [v1.1.0](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.0) 有三条路径。每条路径各自有一个对话实体，在「设置 → 语音助手」里选用。
+Home Assistant Assist 的可插拔对话代理。当前版本 [v1.1.1](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.1) 有三条路径。每条路径各自有一个对话实体，在「设置 → 语音助手」里选用。
 
 - **Cursor** 使用浏览器登录和 [Cursor Bridge](https://cursorbridge.dev)。
 - 菜单里的 **OpenAI** 是 OpenAI 兼容协议：`Authorization: Bearer` 和 chat completions。官方模式调用 OpenAI。自定义基础 URL 把同一套请求发到任何实现了该 API 的主机，包括 Azure OpenAI、OpenRouter 和本地代理。
@@ -17,7 +17,7 @@ Home Assistant Assist 的可插拔对话代理。当前版本 [v1.1.0](https://g
 
 菜单仍使用 OpenAI 和 Anthropic 这两个名字，因为它们表示的是协议。其他厂商只要接口符合其中一种风格，就可以选对应的菜单项。
 
-集成域名是 `smart_llm`。集成清单里的版本是 `1.1.0`。
+集成域名是 `smart_llm`。集成清单里的版本是 `1.1.1`。v1.1.1 只调整设置文案：OpenAI 与 Anthropic 是兼容协议，可以使用官方端点，也可以把自定义基础 URL 指向其他厂商。
 
 ## 功能
 
@@ -53,7 +53,7 @@ https://github.com/YyyQq-C/hass-smart-llm
 
 ### 更新
 
-已经装过的实例要换成 [v1.1.0](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.0) 或之后的版本时，在 HACS 里更新即可。自定义仓库和已有的 Smart LLM 配置项都保留。
+已经装过的实例要换成 [v1.1.1](https://github.com/YyyQq-C/hass-smart-llm/releases/tag/v1.1.1) 或之后的版本时，在 HACS 里更新即可。自定义仓库和已有的 Smart LLM 配置项都保留。
 
 1. 打开 HACS → 集成 → **Smart LLM**。
 2. HACS 提示有新版本时，选择 **Update**（更新）。若要重新拉取当前版本，打开菜单并选择 **Redownload**（重新下载）。
